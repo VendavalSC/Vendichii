@@ -2122,6 +2122,25 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
         LOG_INFO(Config, "Applied recommended MKW settings after per-game configuration");
     }
     PrepareShaderPrecache(title_id, std::filesystem::path{filename.toStdU16String()});
+
+    if (title_id == Settings::OcarinaOfTimeProgramId && !asked_recommended_oot_settings) {
+        asked_recommended_oot_settings = true;
+        use_recommended_oot_settings =
+            QMessageBox::question(
+                this, tr("Recommended Ocarina of Time settings"),
+                tr("Use the recommended performance settings for Ocarina of Time?\n\n"
+                   "FSR3 scaling, GPU accuracy Low, GPU NVDEC, asynchronous presentation and "
+                   "asynchronous shaders.\n\n"
+                   "They apply until Lichii is closed. Your saved settings are not changed."),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
+        LOG_INFO(Config, "OoT recommended settings accepted: {}", use_recommended_oot_settings);
+    }
+    if (Settings::ApplyOcarinaOfTimePreset(Settings::values, title_id,
+                                           use_recommended_oot_settings)) {
+        QtCommon::system->ApplySettings();
+        Settings::UpdateGPUAccuracy();
+        LOG_INFO(Config, "Applied recommended OoT settings after per-game configuration");
+    }
     Settings::LogSettings();
 
     if (UISettings::values.select_user_on_boot && !user_flag_cmd_line) {

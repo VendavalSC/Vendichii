@@ -7,6 +7,7 @@
 namespace Settings {
 
 inline constexpr u64 MarioKartWorldProgramId = 0x0400C3F00006E000ULL;
+inline constexpr u64 OcarinaOfTimeProgramId = 0x0400486024DEC000ULL;
 
 inline void SetMarioKartWorldRecommendedSettings(Values& settings, bool global) {
     const auto session = [global](auto& setting, auto value) {
@@ -31,6 +32,26 @@ inline bool ApplyMarioKartWorldPreset(Values& settings, u64 program_id, bool acc
         return false;
     }
     SetMarioKartWorldRecommendedSettings(settings, false);
+    return true;
+}
+
+inline void SetOcarinaOfTimeRecommendedSettings(Values& settings, bool global) {
+    const auto session = [global](auto& setting, auto value) {
+        setting.SetGlobal(global);
+        setting.SetValue(value);
+    };
+    session(settings.scaling_filter, ScalingFilter::Fsr3);
+    session(settings.gpu_accuracy, GpuAccuracy::Low);
+    session(settings.nvdec_emulation, NvdecEmulation::Gpu);
+    session(settings.async_presentation, true);
+    session(settings.use_asynchronous_shaders, true);
+}
+
+inline bool ApplyOcarinaOfTimePreset(Values& settings, u64 program_id, bool accepted) {
+    if (!accepted || program_id != OcarinaOfTimeProgramId) {
+        return false;
+    }
+    SetOcarinaOfTimeRecommendedSettings(settings, false);
     return true;
 }
 
