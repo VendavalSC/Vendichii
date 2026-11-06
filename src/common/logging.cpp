@@ -275,7 +275,7 @@ struct FileBackend final : public Backend {
                 return std::string{};
             }();
             if (!username.empty()) {
-                // The build version can contain the username ("Frizti v2" for user "Frizt").
+                // The build version can contain the username ("Vendichii v1" for user "vendi").
                 const std::string_view version{Common::g_build_version};
                 const bool keep_version =
                     !version.empty() && version.find(username) != std::string_view::npos &&

@@ -16,6 +16,8 @@ Lichii is an experimental, open-source Nintendo Switch and Switch 2 emulator wri
 
 This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 
+> **Vendichii** is vendi's fork of Lichii, by way of Frizti's frizti-v2 build, tuned for a steady 60 fps in The Legend of Zelda: Ocarina of Time. Its builds report themselves as "Vendichii vN"; everything below describes Lichii, which this fork keeps as its base.
+
 ## Downloads and setup
 
 Published builds belong on this fork's [releases page](https://github.com/zortos293/Eglantine/releases). The repository still uses its historical Eglantine name; the desktop application is now Lichii.
