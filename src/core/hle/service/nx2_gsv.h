@@ -38,6 +38,7 @@
 #include "video_core/renderer_base.h"
 #include "core/frontend/framebuffer_layout.h"
 #include "core/perf_stats.h"
+#include "core/guest_thread_profile.h"
 #include "video_core/gpu.h"
 #include "video_core/nx2_perf.h"
 #include "video_core/framebuffer_config.h"
@@ -1737,6 +1738,10 @@ private:
     void PresentClientBuffer(HLERequestContext& ctx) {
         const auto* w = ctx.CommandBuffer();
         ++m_presents;
+        if (Core::GuestThreadProfile::Enabled()) {
+            Core::GuestThreadProfile::g_present_thread.store(ctx.GetThread().GetThreadId(),
+                                                             std::memory_order_relaxed);
+        }
         if (Common::DkbFrameTrace::Enabled()) {
             m_vsync->trace_present.store(m_presents, std::memory_order_relaxed);
         }
@@ -1770,8 +1775,22 @@ private:
                    VideoCommon::Nx2Perf::On(VideoCommon::Nx2Perf::Opt::FramesAhead)) {
             frames_ahead = 1;
         }
+        // Ocarina keeps two frames in flight: wait only for the fence of the frame before the
+        // previous one, never for this one. With one frame ahead, a GPU still on the previous
+        // frame made this present wait for this frame as well, so the emulated GPU ran dry while
+        // the game was blocked here. Kokiri Forest benchmark: 47.1 fps with one, 48.6 with two,
+        // no visual difference. EDEN_NX2_FRAMES_IN_FLIGHT=1 goes back to one.
+        static const int frames_in_flight = [] {
+            const char* const value = std::getenv("EDEN_NX2_FRAMES_IN_FLIGHT");
+            return value != nullptr && value[0] == '1' ? 1 : 2;
+        }();
         const auto entered = std::chrono::steady_clock::now();
-        if (frames_ahead == 1 || (frames_ahead == -1 && !WaitForFrame(~w[22], w[24], true))) {
+        if (frames_in_flight == 2 && app_program_id == OcarinaOfTimeProgramId) {
+            WaitForFrame(m_older_fence_id, m_older_fence_value);
+            m_older_fence_id = m_previous_fence_id;
+            m_older_fence_value = m_previous_fence_value;
+        } else if (frames_ahead == 1 ||
+                   (frames_ahead == -1 && !WaitForFrame(~w[22], w[24], true))) {
             LOG_DEBUG(Service, "nx2:vi2 present #{} fence ({}, {:#x}), waiting for ({}, {:#x}); now {:#x}",
                       m_presents, ~w[22], w[24], m_previous_fence_id, m_previous_fence_value,
                       ~w[22] < 192 ? system.Host1x().GetSyncpointManager().GetGuestSyncpointValue(~w[22]) : 0U);
@@ -1786,7 +1805,13 @@ private:
                                     !system.Host1x().GetSyncpointManager().IsReadyGuest(
                                         m_previous_fence_id, m_previous_fence_value);
             WaitForFrame(m_previous_fence_id, m_previous_fence_value);
-            if (gpu_behind) {
+            // EDEN_NX2_NO_BEHIND_WAIT=1 (Ocarina) keeps the frame ahead when the GPU is behind:
+            // waiting for this frame too drained the GPU thread's queue every time it was.
+            static const bool keep_ahead = [] {
+                const char* const value = std::getenv("EDEN_NX2_NO_BEHIND_WAIT");
+                return value != nullptr && value[0] == '1';
+            }();
+            if (gpu_behind && !(keep_ahead && app_program_id == OcarinaOfTimeProgramId)) {
                 WaitForFrame(~w[22], w[24]);
             }
         } else if (frames_ahead == 0) {
@@ -1880,6 +1905,9 @@ private:
     } m_stats{};
     u32 m_previous_fence_id{~0U}; // none yet (WaitForFrame ignores ids >= 192)
     u32 m_previous_fence_value{};
+    /// The frame before m_previous_fence_id's (EDEN_NX2_FRAMES_IN_FLIGHT=2).
+    u32 m_older_fence_id{~0U};
+    u32 m_older_fence_value{};
 
     // The console flips one frame per 60 Hz vblank and keeps the rest queued, so a game can't
     // present faster than that. Every slot is reported free here: hold each present until the

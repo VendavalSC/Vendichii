@@ -94,7 +94,25 @@ constexpr std::array DYNAMIC_FPS_RECORDS{
     BuiltinPatchRecord{.module_offset = 0x3C46200, .bytes = DYNAMIC_FPS_ROUTINE},
 };
 
+// Ocarina of Time decompresses streamed data on its main threads with a statically linked zstd:
+// ZSTD_decompressMultiFrame at main+0xEB380 starts with a PACIBSP, which becomes BRK #0x5A57 and
+// runs the host's zstd instead (core/arm/dynarmic/native_zstd.h).
+constexpr std::array<u8, 4> NATIVE_ZSTD_BRK{0xE0, 0x4A, 0x2B, 0xD4}; // brk #0x5a57
+constexpr std::array NATIVE_ZSTD_RECORDS{
+    BuiltinPatchRecord{.module_offset = 0xEB380,
+                       .bytes = NATIVE_ZSTD_BRK,
+                       .checked = true,
+                       .original = 0xD503237F}, // pacibsp
+};
+
 constexpr std::array BUILTIN_PATCHES{
+    BuiltinPatch{
+        .name = "Native zstd (built-in)",
+        .title_id = 0x0400486024DEC000,
+        .module = "main",
+        .build_id = "E0F3CCFAF50065AE4EA01EB5AEB13B1A45DA3348",
+        .records = NATIVE_ZSTD_RECORDS,
+    },
     BuiltinPatch{
         .name = "Max Resolution (built-in)",
         .title_id = 0x0400486024DEC000,

@@ -336,6 +336,11 @@ public:
     void PopAsyncFlushes();
     void PopAsyncBuffers();
 
+    /// Lets popped downloads skip guest CPU writes that are not collected yet.
+    void SetPendingCpuWriteCheck(std::function<bool(DAddr, u64)> check) {
+        has_pending_cpu_writes = std::move(check);
+    }
+
     bool DMACopy(GPUVAddr src_address, GPUVAddr dest_address, u64 amount);
 
     bool DMAClear(GPUVAddr src_address, u64 amount, u32 value);
@@ -452,6 +457,11 @@ public:
     std::unordered_set<DAddr> native_indirect_uniforms_this_frame;
 
 private:
+    /// Writes a popped download's bytes over [start, end) of guest memory, except the 64-byte
+    /// blocks that changed since `taken` was read, and records what it wrote in the snapshots
+    /// of the later downloads, so they don't take this write for a CPU one.
+    void WriteUnchangedDownload(DAddr start, DAddr end, const u8* data, const u8* taken);
+
     template <typename Func>
     static void ForEachEnabledBit(u32 enabled_mask, Func&& func) {
         for (u32 index = 0; enabled_mask != 0; ++index, enabled_mask >>= 1) {
@@ -747,6 +757,15 @@ private:
     /// fence pops. A write to a range after a download was taken removes it from that download
     /// (and every other pending one): its bytes are older than the write.
     std::deque<Common::RangeSet<DAddr>> pending_download_ranges;
+    /// For each entry of pending_downloads on native titles: guest memory under its copies when
+    /// they were taken, in copy order. Guest CPU writes are only collected now and then, so a
+    /// download could write its older GPU bytes over one that is not collected yet (geometry torn
+    /// across the screen with EDEN_NX2_PREFLUSH=1): the pop keeps every 64-byte block that no
+    /// longer holds what the snapshot does.
+    std::deque<std::vector<u8>> pending_download_snapshots;
+    /// Whether guest CPU writes to a range are not collected yet (Tegra::GPU::HasPendingCPUWrites):
+    /// such a write can predate the download's snapshot, so the pop keeps those blocks too.
+    std::function<bool(DAddr, u64)> has_pending_cpu_writes;
     std::optional<Async_Buffer> current_buffer;
 
     std::deque<Async_Buffer> async_buffers_death_ring;

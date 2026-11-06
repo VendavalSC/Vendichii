@@ -6,6 +6,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <chrono>
+#include <cstdlib>
+#include <string_view>
+#include <vector>
 #include <string>
 #include <thread>
 
@@ -504,8 +507,125 @@ void SetCurrentThreadPriority(ThreadPriority new_priority) {
 #endif
 }
 
+#ifdef _WIN32
+namespace {
+struct AffinityRule {
+    std::string pattern;
+    DWORD_PTR mask;
+};
+
+/// Logical processor masks of the physical cores, in the order Windows lists them.
+std::vector<DWORD_PTR> PhysicalCoreMasks() {
+    std::vector<DWORD_PTR> cores;
+    DWORD length = 0;
+    GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &length);
+    std::vector<u8> buffer(length);
+    auto* info = reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(buffer.data());
+    if (length == 0 || !GetLogicalProcessorInformationEx(RelationProcessorCore, info, &length)) {
+        return cores;
+    }
+    for (DWORD offset = 0; offset < length;) {
+        const auto* entry =
+            reinterpret_cast<const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(buffer.data() + offset);
+        if (entry->Processor.GroupMask[0].Group == 0) {
+            cores.push_back(entry->Processor.GroupMask[0].Mask);
+        }
+        offset += entry->Size;
+    }
+    return cores;
+}
+
+/// Without EDEN_THREAD_AFFINITY: guest cores 4 and 5 (where Ocarina of Time runs its main
+/// threads) and the GPU back thread each get a physical core of their own, SMT sibling included,
+/// and every other named thread runs on the remaining cores. In OoT's Kokiri Forest benchmark that
+/// took 44.2 fps to 51.5 (1% low 38.0 to 43.2). With fewer than five cores the back thread shares:
+/// 46.6 fps. Giving the GPU front thread a core as well made the front/back split race (vegetation,
+/// Link and rocks flashed white several times a second).
+std::vector<AffinityRule> DefaultAffinityRules() {
+    const std::vector<DWORD_PTR> cores = PhysicalCoreMasks();
+    if (cores.size() < 4) {
+        return {};
+    }
+    DWORD_PTR all = 0;
+    for (const DWORD_PTR core : cores) {
+        all |= core;
+    }
+    std::vector<AffinityRule> rules{
+        {"CPUCore_4", cores[2]},
+        {"CPUCore_5", cores[3]},
+    };
+    DWORD_PTR reserved = cores[2] | cores[3];
+    if (cores.size() >= 5) {
+        rules.push_back({"GPUBack", cores[1]});
+        reserved |= cores[1];
+    }
+    rules.push_back({"*", all & ~reserved});
+    return rules;
+}
+
+// EDEN_THREAD_AFFINITY="GPU:0;GPUBack:2;CPUCore_4:4;CPUCore_*:8-11": pins the threads named so
+// (a trailing * matches a prefix; the first rule that matches wins) to those logical processors;
+// "0" leaves every thread to Windows. Windows places them freely otherwise, and a thread
+// spinning on the SMT sibling of a busy one slows it down.
+void ApplyThreadAffinity(std::string_view name) {
+    using Rule = AffinityRule;
+    static const std::vector<Rule> rules = [] {
+        std::vector<Rule> result;
+        const char* const text = std::getenv("EDEN_THREAD_AFFINITY");
+        if (text == nullptr) {
+            return DefaultAffinityRules();
+        }
+        std::string_view rest = text;
+        while (!rest.empty()) {
+            const size_t end = rest.find(';');
+            const std::string_view item = rest.substr(0, end);
+            rest = end == std::string_view::npos ? std::string_view{} : rest.substr(end + 1);
+            const size_t colon = item.find(':');
+            if (colon == std::string_view::npos) {
+                continue;
+            }
+            DWORD_PTR mask = 0;
+            std::string_view cpus = item.substr(colon + 1);
+            while (!cpus.empty()) {
+                const size_t comma = cpus.find(',');
+                const std::string range{cpus.substr(0, comma)};
+                cpus = comma == std::string_view::npos ? std::string_view{} : cpus.substr(comma + 1);
+                const size_t dash = range.find('-');
+                const unsigned first = static_cast<unsigned>(std::strtoul(range.c_str(), nullptr, 10));
+                const unsigned last =
+                    dash == std::string::npos
+                        ? first
+                        : static_cast<unsigned>(std::strtoul(range.c_str() + dash + 1, nullptr, 10));
+                for (unsigned cpu = first; cpu <= last && cpu < sizeof(DWORD_PTR) * 8; ++cpu) {
+                    mask |= DWORD_PTR{1} << cpu;
+                }
+            }
+            if (mask != 0) {
+                result.push_back({std::string{item.substr(0, colon)}, mask});
+            }
+        }
+        return result;
+    }();
+    for (const Rule& rule : rules) {
+        const bool match = !rule.pattern.empty() && rule.pattern.back() == '*'
+                               ? name.starts_with(std::string_view{rule.pattern}.substr(
+                                     0, rule.pattern.size() - 1))
+                               : name == rule.pattern;
+        if (match) {
+            SetThreadAffinityMask(GetCurrentThread(), rule.mask);
+            LOG_INFO(Common, "Thread {} pinned to processor mask {:#x}", name, rule.mask);
+            return;
+        }
+    }
+}
+} // Anonymous namespace
+#endif
+
 void SetCurrentThreadName(const char* name) {
     Nx2SampleProfile::OnThreadNamed(name);
+#ifdef _WIN32
+    ApplyThreadAffinity(name);
+#endif
 #ifdef _MSC_VER
     // Sets the debugger-visible name of the current thread.
     if (auto pf = (decltype(&SetThreadDescription))(void*)GetProcAddress(GetModuleHandle(TEXT("KernelBase.dll")), "SetThreadDescription"); pf)
