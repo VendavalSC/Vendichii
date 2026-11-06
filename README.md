@@ -17,6 +17,12 @@
 
 # Lichii
 
+> **Unofficial superbuild fork.** This repository is not official Lichii and is
+> not affiliated with zortos293. It carries a curated set of performance and
+> correctness fixes on top of `nx2`; see [SUPERBUILD.md](SUPERBUILD.md) for the
+> included commits, skipped fixes and build instructions. Use a stock build as
+> fallback.
+
 Lichii is an experimental, open-source Nintendo Switch and Switch 2 emulator written in C++. It builds on Eglantine, Eden, yuzu and Sudachi, preserving their contributions while developing this fork's game compatibility and renderer fixes.
 
 This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.

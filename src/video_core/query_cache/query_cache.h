@@ -306,7 +306,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
                          trace, asid, addr, cpu_addr, static_cast<u32>(counter_type),
                          static_cast<u32>(query_base->flags));
             }
-            impl->pending_unregister.push_back(query_location);
+            retire();
             return;
         }
         if (False(query_base->flags & QueryFlagBits::IsFinalValueSynced)) [[unlikely]] {
@@ -319,7 +319,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
             }
             LOG_ERROR(HW_GPU,
                       "Query report value not synchronized. Consider increasing GPU accuracy.");
-            impl->pending_unregister.push_back(query_location);
+            retire();
             return;
         }
         query_base->value += streamer->GetAmendValue();
@@ -351,10 +351,19 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
                      wide ? query_base->value : static_cast<u32>(query_base->value),
                      static_cast<u32>(query_base->flags));
         }
-        impl->pending_unregister.push_back(query_location);
+        retire();
     });
-    if (is_fence) {
-        VideoCore::g_signaling_query_report_fence = true;
+    if (free_on_run) {
+        {
+            std::scoped_lock lock(cache_mutex);
+            delayed_reports.insert_or_assign(cpu_addr, query_location);
+        }
+        // The fence carrying it must wait for the host GPU: a placeholder one runs the write as
+        // soon as the fencing thread reaches it, possibly before the GPU finished.
+        needs_real_fence.store(true, std::memory_order_relaxed);
+        impl->rasterizer.SyncOperation(std::move(operation));
+        impl->rasterizer.SignalFence([] {});
+    } else if (is_fence) {
         impl->rasterizer.SignalFence(std::move(operation));
         VideoCore::g_signaling_query_report_fence = false;
     } else {
@@ -389,6 +398,12 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
             return;
         }
         impl->rasterizer.SyncOperation(std::move(operation));
+    }
+    if (is_synced) {
+        if (!free_on_run) {
+            streamer->Free(new_query_id);
+        }
+        return;
     }
     auto [cont_addr, base] = gen_caching_indexing(cpu_addr);
     {
@@ -473,27 +488,30 @@ bool QueryCacheBase<Traits>::AccelerateHostConditionalRendering() {
         }
         VAddr cpu_addr = *cpu_addr_opt;
         std::scoped_lock lock(cache_mutex);
-        auto it1 = cached_queries.find(cpu_addr >> Core::DEVICE_PAGEBITS);
-        if (it1 == cached_queries.end()) {
+        const auto found = [&]() -> std::optional<QueryLocation> {
+            for (const VAddr candidate : {cpu_addr, cpu_addr + 4}) {
+                if (const auto it1 = cached_queries.find(candidate >> Core::DEVICE_PAGEBITS);
+                    it1 != cached_queries.end()) {
+                    if (const auto it = it1->second.find(candidate & Core::DEVICE_PAGEMASK);
+                        it != it1->second.end()) {
+                        return it->second;
+                    }
+                }
+            }
+            for (const VAddr candidate : {cpu_addr, cpu_addr + 4}) {
+                if (const auto it = delayed_reports.find(candidate); it != delayed_reports.end()) {
+                    return it->second;
+                }
+            }
+            return std::nullopt;
+        }();
+        if (!found) {
             return VideoCommon::LookupData{
                 .address = cpu_addr,
                 .found_query = nullptr,
             };
         }
-        auto& sub_container = it1->second;
-        auto it_current = sub_container.find(cpu_addr & Core::DEVICE_PAGEMASK);
-
-        if (it_current == sub_container.end()) {
-            auto it_current_2 = sub_container.find((cpu_addr & Core::DEVICE_PAGEMASK) + 4);
-            if (it_current_2 == sub_container.end()) {
-                return VideoCommon::LookupData{
-                    .address = cpu_addr,
-                    .found_query = nullptr,
-                };
-            }
-            it_current = it_current_2;
-        }
-        auto* query = impl->ObtainQuery(it_current->second);
+        auto* query = impl->ObtainQuery(*found);
         qc_dirty |= True(query->flags & QueryFlagBits::IsHostManaged) &&
                     False(query->flags & QueryFlagBits::IsGuestSynced);
         return VideoCommon::LookupData{
@@ -542,6 +560,7 @@ template <typename Traits>
 void QueryCacheBase<Traits>::CommitAsyncFlushes() {
     // Make sure to have the results synced in Host.
     NotifyWFI();
+    needs_real_fence.store(false, std::memory_order_relaxed);
 
     u64 mask{};
     {
@@ -576,7 +595,7 @@ void QueryCacheBase<Traits>::CommitAsyncFlushes() {
 
 template <typename Traits>
 bool QueryCacheBase<Traits>::HasUncommittedFlushes() const {
-    bool result = false;
+    bool result = needs_real_fence.load(std::memory_order_relaxed);
     impl->ForEachStreamer([&result](StreamerInterface* streamer) {
         result |= streamer->HasUnsyncedQueries();
         return result;
@@ -586,7 +605,7 @@ bool QueryCacheBase<Traits>::HasUncommittedFlushes() const {
 
 template <typename Traits>
 bool QueryCacheBase<Traits>::HasPendingFenceWork() const {
-    bool result = false;
+    bool result = needs_real_fence.load(std::memory_order_relaxed);
     impl->ForEachStreamer([&result](StreamerInterface* streamer) {
         result |= streamer->HasUnsyncedQueries() || streamer->HasPendingSync();
         return result;

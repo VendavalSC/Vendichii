@@ -718,7 +718,8 @@ private:
 
     [[nodiscard]] Binding StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index, bool is_written,
                                                bool native_pointer = false,
-                                               bool table_pointer = false) const;
+                                               bool table_pointer = false,
+                                               bool mapping_sized = false) const;
 
     void TraceTablePointer(bool compute, size_t stage, size_t ssbo_index, u32 cbuf_index,
                            u32 cbuf_offset, u32 indirect_offset, GPUVAddr holder,
@@ -745,6 +746,13 @@ private:
 
     /// Re-dirties repacked vertex buffers whose source data was written since they were bound.
     void RefreshRepackedVertexBuffers();
+
+    /// CPU writes collected but not yet applied (SetPendingCpuWrites).
+    [[nodiscard]] Common::RangeSet<DAddr> PendingCpuWriteRanges();
+
+    /// Writes downloaded bytes to guest memory, except over `cpu_written`.
+    void WriteDownloadedMemory(const Common::RangeSet<DAddr>& cpu_written, DAddr device_addr,
+                               const u8* data, u64 size);
 
     void InlineMemoryImplementation(DAddr dest_address, size_t copy_size,
                                     std::span<const u8> inlined_buffer);
