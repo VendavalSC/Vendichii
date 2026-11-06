@@ -25,6 +25,7 @@
 #include "core/cpu_manager.h"
 #include "core/debugger/debugger.h"
 #include "core/debugger/nx2_debug_tools.h"
+#include "core/guest_thread_profile.h"
 #include "core/device_memory.h"
 #include "core/file_sys/card_image.h"
 #include "core/file_sys/content_archive.h"
@@ -492,10 +493,12 @@ struct System::Impl {
         }
         debug_service = Nx2Debug::MaybeStartService(system, name, params.program_id);
         Nx2Sampler::StartFromEnvironment();
+        guest_thread_profile = GuestThreadProfile::Start(kernel);
         return SystemResultStatus::Success;
     }
 
     void ShutdownMainProcess() {
+        guest_thread_profile = {};
         debug_service.reset();
         SetShuttingDown(true);
         Common::ADPF::Shutdown();
@@ -589,6 +592,8 @@ struct System::Impl {
     std::optional<Service::KernelHelpers::ServiceContext> general_channel_context;
     std::optional<Service::Event> general_channel_event;
     std::optional<Core::PerfStats> perf_stats;
+    /// EDEN_GUEST_THREAD_PROFILE; reset first in ShutdownMainProcess, while the kernel is up.
+    std::jthread guest_thread_profile;
     std::optional<Tegra::Host1x::Host1x> host1x_core;
     std::optional<Core::DeviceMemory> device_memory;
     std::optional<AudioCore::AudioCore> audio_core;
