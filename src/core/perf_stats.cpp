@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
+#include <iomanip>
 #include <iterator>
 #include <mutex>
 #include <numeric>
@@ -17,6 +19,7 @@
 #include "common/fs/fs.h"
 #include "common/fs/path_util.h"
 #include "common/settings.h"
+#include "common/tas_state.h"
 #include "core/perf_stats.h"
 
 using namespace std::chrono_literals;
@@ -30,7 +33,40 @@ constexpr std::size_t IgnoreFrames = 5;
 
 namespace Core {
 
-PerfStats::PerfStats(u64 title_id_) : title_id(title_id_) {}
+PerfStats::PerfStats(u64 title_id_) : title_id(title_id_) {
+    const char* const fps_log = std::getenv("EDEN_FPS_LOG");
+    if (fps_log == nullptr || fps_log[0] == '0' || title_id == 0) {
+        return;
+    }
+    const std::time_t t = std::time(nullptr);
+    std::ostringstream date;
+    date << std::put_time(std::localtime(&t), "%F-%H-%M-%S");
+    const auto filepath = Common::FS::GetEdenPath(Common::FS::EdenPath::LogDir) /
+                          fmt::format("fps_{:016X}_{}.csv", title_id, date.str());
+    if (!Common::FS::CreateParentDir(filepath)) {
+        return;
+    }
+    fps_log_file = std::make_unique<Common::FS::IOFile>(
+        filepath, Common::FS::FileAccessMode::Write, Common::FS::FileType::TextFile);
+    if (!fps_log_file->IsOpen()) {
+        fps_log_file.reset();
+        return;
+    }
+    void(fps_log_file->WriteString(
+        std::string_view{"seconds,fps,avg_ms,low1_fps,max_ms,tas,end_ns\n"}));
+    fps_log_intervals_ms.reserve(256);
+
+    // Frames of 25 ms or more, timed on the steady clock (QPC on Windows) so that
+    // tools/windows/hitch_report.py can line them up with EDEN_NX2_SAMPLE_PROFILE samples.
+    fps_hitch_file = std::make_unique<Common::FS::IOFile>(
+        filepath.parent_path() / fmt::format("hitch_{:016X}_{}.csv", title_id, date.str()),
+        Common::FS::FileAccessMode::Write, Common::FS::FileType::TextFile);
+    if (fps_hitch_file->IsOpen()) {
+        void(fps_hitch_file->WriteString(std::string_view{"end_ns,ms\n"}));
+    } else {
+        fps_hitch_file.reset();
+    }
+}
 
 PerfStats::~PerfStats() {
     if (!Settings::values.record_frame_times || title_id == 0) {
@@ -85,6 +121,56 @@ void PerfStats::EndSystemFrame() {
 
 void PerfStats::EndGameFrame() {
     game_frames.fetch_add(1, std::memory_order_relaxed);
+    if (fps_log_file) {
+        LogGameFrame();
+    }
+}
+
+void PerfStats::LogGameFrame() {
+    std::scoped_lock lock{fps_log_mutex};
+
+    const auto now = Clock::now();
+    if (fps_log_last_frame == Clock::time_point{}) {
+        fps_log_start = now;
+        fps_log_window_start = now;
+        fps_log_last_frame = now;
+        return;
+    }
+    const double interval_ms =
+        std::chrono::duration<double, std::milli>(now - fps_log_last_frame).count();
+    fps_log_intervals_ms.push_back(interval_ms);
+    fps_log_last_frame = now;
+    if (fps_hitch_file && interval_ms >= 25.0) {
+        void(fps_hitch_file->WriteString(fmt::format(
+            "{},{:.2f}\n",
+            std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count(),
+            interval_ms)));
+    }
+    if (now - fps_log_window_start < 1s) {
+        return;
+    }
+
+    const double window_s = duration_cast<DoubleSecs>(now - fps_log_window_start).count();
+    const size_t count = fps_log_intervals_ms.size();
+    const double avg_ms =
+        std::accumulate(fps_log_intervals_ms.begin(), fps_log_intervals_ms.end(), 0.0) /
+        static_cast<double>(count);
+    // 1% low: the frame time 99% of this second's frames beat
+    std::ranges::sort(fps_log_intervals_ms);
+    const double p99_ms = fps_log_intervals_ms[std::min(count - 1, count * 99 / 100)];
+    void(fps_log_file->WriteString(fmt::format(
+        "{:.1f},{:.1f},{:.2f},{:.1f},{:.2f},{},{}\n",
+        duration_cast<DoubleSecs>(now - fps_log_start).count(),
+        static_cast<double>(count) / window_s, avg_ms, 1000.0 / p99_ms,
+        fps_log_intervals_ms.back(), Common::g_tas_playing.load(std::memory_order_relaxed) ? 1 : 0,
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count())));
+    void(fps_log_file->Flush());
+    if (fps_hitch_file) {
+        void(fps_hitch_file->Flush());
+    }
+
+    fps_log_intervals_ms.clear();
+    fps_log_window_start = now;
 }
 
 double PerfStats::GetMeanFrametime() const {

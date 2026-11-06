@@ -4,7 +4,10 @@
 // SPDX-FileCopyrightText: Copyright 2021 yuzu Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <sstream>
 #include <fmt/ranges.h>
 
@@ -13,6 +16,7 @@
 #include "common/fs/path_util.h"
 #include "common/logging.h"
 #include "common/settings.h"
+#include "common/tas_state.h"
 #include "input_common/drivers/tas_input.h"
 
 namespace InputCommon::TasInput {
@@ -51,6 +55,8 @@ constexpr std::array<std::pair<std::string_view, TasButton>, 18> text_to_tas_but
 };
 
 Tas::Tas(std::string input_engine_) : InputEngine(std::move(input_engine_)) {
+    const char* const realtime_env = std::getenv("EDEN_TAS_REALTIME");
+    realtime = realtime_env != nullptr && realtime_env[0] == '1';
     for (size_t player_index = 0; player_index < PLAYER_NUMBER; player_index++) {
         PadIdentifier identifier{
             .guid = Common::UUID{},
@@ -194,27 +200,63 @@ void Tas::UpdateThread() {
         return;
     }
 
+    // EDEN_TAS_START_FILE=<path>: a script starts the loaded TAS from the beginning by creating
+    // that file (tools/windows/auto_bench.py), as Ctrl+F6 then Ctrl+F5 would.
+    static const char* const start_file = std::getenv("EDEN_TAS_START_FILE");
+    if (start_file != nullptr && !is_running && !is_recording) {
+        std::error_code error;
+        if (std::filesystem::remove(start_file, error)) {
+            needs_reset = true;
+            is_running = true;
+            LOG_INFO(Input, "TAS started by {}", start_file);
+        }
+    }
+
+    size_t steps = 1;
+    if (realtime) {
+        const auto now = std::chrono::steady_clock::now();
+        if (!tick_origin) {
+            tick_origin = now;
+            ticks_done = 0;
+        }
+        const size_t due = static_cast<size_t>((now - *tick_origin) * 60 / std::chrono::seconds{1});
+        steps = due - ticks_done;
+        ticks_done = due;
+    }
+
     if (is_recording) {
-        record_commands.push_back(last_input);
+        record_commands.insert(record_commands.end(), steps, last_input);
     }
     if (needs_reset) {
         current_command = 0;
         needs_reset = false;
+        tick_origin.reset();
         LoadTasFiles();
         LOG_DEBUG(Input, "tas_reset done");
     }
 
+    Common::g_tas_playing.store(is_running, std::memory_order_relaxed);
     if (!is_running) {
         ClearInput();
         return;
     }
+    if (steps == 0) {
+        return;
+    }
     if (current_command < script_length) {
         LOG_DEBUG(Input, "Playing TAS {}/{}", current_command, script_length);
-        const size_t frame = current_command++;
+        const size_t first = current_command;
+        current_command = (std::min)(current_command + steps, script_length);
         for (size_t player_index = 0; player_index < commands.size(); player_index++) {
+            // Commands this frame skipped over still press their buttons, so a tap that lasted
+            // one 1/60 s tick is not lost at a lower frame rate.
             TASCommand command{};
-            if (frame < commands[player_index].size()) {
-                command = commands[player_index][frame];
+            for (size_t frame = first; frame < current_command; ++frame) {
+                if (frame < commands[player_index].size()) {
+                    const u64 buttons = command.buttons | commands[player_index][frame].buttons;
+                    command = commands[player_index][frame];
+                    command.buttons = buttons;
+                }
             }
 
             ApplyCommand(player_index, command);
@@ -322,6 +364,7 @@ void Tas::StartStop() {
         Stop();
     } else {
         is_running = true;
+        tick_origin.reset();
     }
 }
 
@@ -341,6 +384,7 @@ bool Tas::Record() {
         return true;
     }
     is_recording = !is_recording;
+    tick_origin.reset();
     return is_recording;
 }
 

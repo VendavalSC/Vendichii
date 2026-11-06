@@ -4,6 +4,8 @@
 #pragma once
 
 #include <array>
+#include <chrono>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -198,5 +200,11 @@ private:
     std::vector<TASCommand> record_commands{};
     size_t current_command{0};
     TASCommand last_input{}; // only used for recording
+
+    /// EDEN_TAS_REALTIME=1: a command lasts 1/60 s of wall time instead of one displayed frame,
+    /// so a script replays the same route at any frame rate (games that step by elapsed time).
+    bool realtime{};
+    std::optional<std::chrono::steady_clock::time_point> tick_origin{};
+    size_t ticks_done{};
 };
 } // namespace InputCommon::TasInput

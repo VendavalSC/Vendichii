@@ -7,8 +7,14 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <memory>
 #include <mutex>
+#include <vector>
 #include "common/common_types.h"
+
+namespace Common::FS {
+class IOFile;
+}
 
 namespace Core {
 
@@ -52,7 +58,19 @@ public:
     double GetLastFrameTimeScale() const;
 
 private:
+    /// EDEN_FPS_LOG: appends one CSV line per second of game frames (fps, 1% low, worst frame)
+    /// and one hitch line per frame of 25 ms or more
+    void LogGameFrame();
+
     mutable std::mutex object_mutex;
+
+    std::mutex fps_log_mutex;
+    std::unique_ptr<Common::FS::IOFile> fps_log_file;
+    std::unique_ptr<Common::FS::IOFile> fps_hitch_file;
+    Clock::time_point fps_log_start{};
+    Clock::time_point fps_log_window_start{};
+    Clock::time_point fps_log_last_frame{};
+    std::vector<double> fps_log_intervals_ms;
 
     /// Title ID for the game that is running. 0 if there is no game running yet
     u64 title_id{0};
