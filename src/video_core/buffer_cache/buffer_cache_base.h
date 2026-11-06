@@ -255,6 +255,13 @@ public:
     /// Cancels pending downloads over the range, so a fence can't write them over newer bytes.
     void ClearDownload(DAddr base_addr, u64 size);
 
+    /// CPU writes collected but not yet applied (SetPendingCpuWrites).
+    [[nodiscard]] Common::RangeSet<DAddr> PendingCpuWriteRanges();
+
+    /// Writes downloaded bytes to guest memory, except over `cpu_written`.
+    void WriteDownloadedMemory(const Common::RangeSet<DAddr>& cpu_written, DAddr device_addr,
+                               const u8* data, u64 size);
+
     bool OnCPUWrite(DAddr device_addr, u64 size);
 
     void DownloadMemory(DAddr device_addr, u64 size);
@@ -320,6 +327,18 @@ public:
                                                           ObtainBufferOperation post_op);
     void FlushCachedWrites();
 
+    /// Where the CPU writes into GPU-written memory that were collected but not applied yet
+    /// (WriteMemory) come from: downloads must not write the GPU's older copy over them.
+    using PendingCpuWrites = std::function<void(const std::function<void(DAddr, size_t)>&)>;
+    void SetPendingCpuWrites(PendingCpuWrites source) {
+        pending_cpu_writes = std::move(source);
+    }
+
+    /// Takes CPU writes about to be applied one by one out of the GPU-written ranges first, so
+    /// applying one doesn't download the GPU's copy over another (WriteMemory keeps the GPU data
+    /// on the pages it writes).
+    void ClaimCpuWrites(std::span<const std::pair<DAddr, u64>> ranges);
+
     /// Return true when there are uncommitted buffers to be downloaded
     [[nodiscard]] bool HasUncommittedFlushes() const noexcept;
 
@@ -336,11 +355,6 @@ public:
     void PopAsyncFlushes();
     void PopAsyncBuffers();
 
-    /// Lets popped downloads skip guest CPU writes that are not collected yet.
-    void SetPendingCpuWriteCheck(std::function<bool(DAddr, u64)> check) {
-        has_pending_cpu_writes = std::move(check);
-    }
-
     bool DMACopy(GPUVAddr src_address, GPUVAddr dest_address, u64 amount);
 
     bool DMAClear(GPUVAddr src_address, u64 amount, u32 value);
@@ -355,7 +369,8 @@ public:
         }
     }
     /// True when it recorded copies, which the GPU completes at `tick` (the caller submits).
-    bool Nx2CopyListPages(u64 tick);
+    /// `writer`: the dispatch's shader hash, 0 for a DMA copy (EDEN_NX2_LIST_WAIT_TRACE).
+    bool Nx2CopyListPages(u64 tick, u64 writer = 0);
     enum class Nx2ListRead { Unknown, Copied, Synced, NeedsSync };
     /// Front thread: Synced when guest memory holds the page `device_addr` lies in (flushed and
     /// written by no GPU work since), else Copied with `out` filled from the copy of its last
@@ -457,11 +472,6 @@ public:
     std::unordered_set<DAddr> native_indirect_uniforms_this_frame;
 
 private:
-    /// Writes a popped download's bytes over [start, end) of guest memory, except the 64-byte
-    /// blocks that changed since `taken` was read, and records what it wrote in the snapshots
-    /// of the later downloads, so they don't take this write for a CPU one.
-    void WriteUnchangedDownload(DAddr start, DAddr end, const u8* data, const u8* taken);
-
     template <typename Func>
     static void ForEachEnabledBit(u32 enabled_mask, Func&& func) {
         for (u32 index = 0; enabled_mask != 0; ++index, enabled_mask >>= 1) {
@@ -705,12 +715,15 @@ private:
             uncommitted_gpu_modified_ranges.Add(device_addr, size);
             return;
         }
+        // Preflushed writes arm the read traps too: their data reaches guest memory only when
+        // the fence's download lands, and a read before that saw stale words (Ocarina of Time's
+        // whole screen flashed white at the sword boulder, ~180 times in 30 s). The trapped read
+        // flushes on demand only while the data is still in flight (GetFlushArea).
         if (!exact) {
             if (memory_tracker.IsRegionPreflushable(device_addr, size)) {
                 uncommitted_gpu_modified_ranges.Add(device_addr, size);
-            } else {
-                ArmReadTraps(device_addr, size);
             }
+            ArmReadTraps(device_addr, size);
             return;
         }
         const DAddr end = device_addr + size;
@@ -723,9 +736,7 @@ private:
                 queued += upper - lower;
             }
         });
-        if (queued < size) {
-            ArmReadTraps(device_addr, size);
-        }
+        ArmReadTraps(device_addr, size);
         if (Nx2DownloadTrace::g_enabled && queued != 0) [[unlikely]] {
             Nx2DownloadTrace::Queued(device_addr, size, queued);
         }
@@ -757,15 +768,7 @@ private:
     /// fence pops. A write to a range after a download was taken removes it from that download
     /// (and every other pending one): its bytes are older than the write.
     std::deque<Common::RangeSet<DAddr>> pending_download_ranges;
-    /// For each entry of pending_downloads on native titles: guest memory under its copies when
-    /// they were taken, in copy order. Guest CPU writes are only collected now and then, so a
-    /// download could write its older GPU bytes over one that is not collected yet (geometry torn
-    /// across the screen with EDEN_NX2_PREFLUSH=1): the pop keeps every 64-byte block that no
-    /// longer holds what the snapshot does.
-    std::deque<std::vector<u8>> pending_download_snapshots;
-    /// Whether guest CPU writes to a range are not collected yet (Tegra::GPU::HasPendingCPUWrites):
-    /// such a write can predate the download's snapshot, so the pop keeps those blocks too.
-    std::function<bool(DAddr, u64)> has_pending_cpu_writes;
+    PendingCpuWrites pending_cpu_writes;
     std::optional<Async_Buffer> current_buffer;
 
     std::deque<Async_Buffer> async_buffers_death_ring;
@@ -810,6 +813,7 @@ private:
         u64 synced_writes{~u64{0}};
         u32 copy_begin{};  ///< Bytes of the page the copy holds (a buffer can end inside it)
         u32 copy_end{};
+        u64 copy_writer{}; ///< What recorded the copy (Nx2CopyListPages)
         /// Written outside a compute dispatch or a DMA copy (a draw's storage writes) at least
         /// once: the front can't tell from what it sent which draws write the page, so it reads
         /// no copy. A draw's writes reach a pushbuffer fetch only after a host-level wait, so
