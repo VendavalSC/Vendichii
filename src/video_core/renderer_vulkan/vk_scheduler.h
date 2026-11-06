@@ -24,6 +24,7 @@
 #include "common/dkb_frame_trace.h"
 #include "common/logging.h"
 #include "common/polyfill_thread.h"
+#include "common/nx2_timeline.h"
 #include "common/settings.h"
 #include "video_core/gpu_split.h"
 #include "video_core/gpu_wait_site.h"
@@ -248,6 +249,7 @@ public:
                 Flush();
             }
             VideoCommon::BackWaitScope wait_scope{"Scheduler::Wait (host GPU execution)"};
+            Common::Nx2Timeline::Span timeline_span{"wait for host GPU"};
             master_semaphore->Wait(tick);
         }
         const auto trace_waited = trace ? std::chrono::steady_clock::now()
