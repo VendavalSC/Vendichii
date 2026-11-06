@@ -1059,8 +1059,23 @@ void BufferCache<P>::CommitAsyncFlushesHigh() {
         normalized_copies.push_back(second_copy);
     }
     runtime.PostCopyBarrier();
+    std::vector<u8> snapshot;
+    if (!AsyncBufferDownloads()) {
+        u64 snapshot_size = 0;
+        for (const BufferCopy& copy : normalized_copies) {
+            snapshot_size += copy.size;
+        }
+        snapshot.resize(snapshot_size);
+        u64 snapshot_offset = 0;
+        for (const BufferCopy& copy : normalized_copies) {
+            device_memory.ReadBlockUnsafe(static_cast<DAddr>(copy.src_offset),
+                                          snapshot.data() + snapshot_offset, copy.size);
+            snapshot_offset += copy.size;
+        }
+    }
     pending_downloads.emplace_back(std::move(normalized_copies));
     pending_download_ranges.emplace_back(std::move(download_ranges));
+    pending_download_snapshots.emplace_back(std::move(snapshot));
     async_buffers.emplace_back(download_staging);
 }
 
@@ -1085,25 +1100,88 @@ void BufferCache<P>::PopAsyncBuffers() {
     }
     auto& downloads = pending_downloads.front();
     auto& ranges = pending_download_ranges.front();
+    const std::vector<u8>& snapshot = pending_download_snapshots.front();
     auto& async_buffer = async_buffers.front();
     u8* base = async_buffer->mapped_span.data();
     const size_t base_offset = async_buffer->offset;
+    u64 snapshot_offset = 0;
     for (const auto& copy : downloads) {
         const DAddr device_addr = static_cast<DAddr>(copy.src_offset);
         const u64 dst_offset = copy.dst_offset - base_offset;
         const u8* read_mapped_memory = base + dst_offset;
+        const u8* taken = snapshot.empty() ? nullptr : snapshot.data() + snapshot_offset;
         // Only what no write replaced since the copy was taken: the rest is older than guest
         // memory (CPU writes) or than the GPU's copy (GPU writes, still to be downloaded).
         ranges.ForEachInRange(device_addr, copy.size, [&](DAddr start, DAddr end) {
-            device_memory.WriteBlockUnsafe(start, &read_mapped_memory[start - device_addr],
-                                           end - start);
+            if (taken != nullptr) {
+                WriteUnchangedDownload(start, end, &read_mapped_memory[start - device_addr],
+                                       &taken[start - device_addr]);
+            } else {
+                device_memory.WriteBlockUnsafe(start, &read_mapped_memory[start - device_addr],
+                                               end - start);
+            }
             gpu_modified_ranges.Subtract(start, end - start);
         });
+        snapshot_offset += copy.size;
     }
     async_buffers_death_ring.emplace_back(*async_buffer);
     async_buffers.pop_front();
     pending_downloads.pop_front();
     pending_download_ranges.pop_front();
+    pending_download_snapshots.pop_front();
+}
+
+template <class P>
+void BufferCache<P>::WriteUnchangedDownload(DAddr start, DAddr end, const u8* data,
+                                            const u8* taken) {
+    constexpr DAddr block_size = 64;
+    static thread_local std::vector<u8> current;
+    current.resize(end - start);
+    device_memory.ReadBlockUnsafe(start, current.data(), current.size());
+    // One query for the whole range first: uncollected writes are rare on these pages.
+    const bool pending_writes = has_pending_cpu_writes && has_pending_cpu_writes(start, end - start);
+
+    const auto write_run = [&](DAddr run_start, DAddr run_end) {
+        const u8* bytes = data + (run_start - start);
+        device_memory.WriteBlockUnsafe(run_start, bytes, run_end - run_start);
+        // The later downloads' snapshots now expect these bytes in guest memory.
+        for (size_t entry = 1; entry < pending_downloads.size(); ++entry) {
+            std::vector<u8>& later = pending_download_snapshots[entry];
+            if (later.empty()) {
+                continue;
+            }
+            u64 offset = 0;
+            for (const BufferCopy& copy : pending_downloads[entry]) {
+                const DAddr copy_start = static_cast<DAddr>(copy.src_offset);
+                const DAddr copy_end = copy_start + copy.size;
+                const DAddr from = (std::max)(run_start, copy_start);
+                const DAddr to = (std::min)(run_end, copy_end);
+                if (from < to) {
+                    std::memcpy(later.data() + offset + (from - copy_start),
+                                bytes + (from - run_start), to - from);
+                }
+                offset += copy.size;
+            }
+        }
+    };
+
+    DAddr run_start = start;
+    for (DAddr block = start; block < end;) {
+        const DAddr block_end = (std::min)(Common::AlignDown(block, block_size) + block_size, end);
+        const u64 offset = block - start;
+        const u64 size = block_end - block;
+        if (std::memcmp(current.data() + offset, taken + offset, size) != 0 ||
+            (pending_writes && has_pending_cpu_writes(block, size))) {
+            if (run_start < block) {
+                write_run(run_start, block);
+            }
+            run_start = block_end;
+        }
+        block = block_end;
+    }
+    if (run_start < end) {
+        write_run(run_start, end);
+    }
 }
 
 template <class P>

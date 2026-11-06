@@ -10,6 +10,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <thread>
@@ -134,6 +135,16 @@ public:
 
     bool RenderPassHasStores() const {
         return render_pass_has_stores;
+    }
+
+    /// A dispatch was recorded: the next render pass must see what it wrote.
+    void NoteComputeWrites() {
+        // EDEN_NX2_COMPUTE_BARRIERS=0 drops the compute-to-graphics barrier (A/B of its cost).
+        static const bool enabled = [] {
+            const char* const value = std::getenv("EDEN_NX2_COMPUTE_BARRIERS");
+            return value == nullptr || value[0] != '0';
+        }();
+        compute_writes_pending = enabled;
     }
 
     /// Returns true when a render pass is currently active in the scheduler state.
@@ -445,6 +456,7 @@ private:
     std::unique_ptr<MasterSemaphore> master_semaphore;
     FragmentBarrierState fragment_barrier;
     bool render_pass_has_stores{};
+    bool compute_writes_pending{};
     bool graphics_pipeline_missing{};
     std::unique_ptr<CommandPool> command_pool;
 

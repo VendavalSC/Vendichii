@@ -71,9 +71,18 @@ void DrainBack() {
 // the queued-writer check added.
 // A release still queued for the split's back meets the acquire: the back runs it before the
 // acquire's channel goes on, so the acquire needs no drain (GpuSplit::QueuedReleasePayload).
+// Off unless EDEN_NX2_QUEUED_RELEASE_SKIP=1: the acquiring channel's work then started on the host
+// GPU before the work ahead of the release had finished, and Ocarina's leaves, grass, rocks and
+// Link flashed white, far more often with the critical threads on cores of their own
+// (common/thread.cpp). As mja00/Lichii 78e2c853d3 (Matt Artist), "wait for acquires instead of
+// predicting them from queued releases".
 bool MetByQueuedRelease(DmaPusher& dma_pusher, const Puller::PendingAcquire& acquire) {
+    static const bool enabled = [] {
+        const char* const value = std::getenv("EDEN_NX2_QUEUED_RELEASE_SKIP");
+        return value != nullptr && value[0] == '1';
+    }();
     auto& split = VideoCommon::GpuSplit::Get();
-    if (!split.Active()) {
+    if (!enabled || !split.Active()) {
         return false;
     }
     const auto device = dma_pusher.memory_manager.GpuToCpuAddress(acquire.address);

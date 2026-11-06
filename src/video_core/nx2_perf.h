@@ -13,11 +13,12 @@
 #include "common/logging.h"
 
 // EXPERIMENT (not for nx2): GPU back-thread optimizations for Ocarina of Time.
-// split_overlap is quarantined. Frizti build: the options reviewed as exact rewrites are on by
-// default; those that change timing or reuse ideas reverted with zortos293/Lichii#161 (its
-// slab of wrong geometry in Kokiri Forest) are off until EDEN_NX2_PERF_ON=<name>,... turns them
-// on: frames_ahead, clean_words, index_rebind, submit_budget, fence_flush, fragment_barrier,
-// front_sleep, async_pipelines, and bounds (this tree keeps its own range cache).
+// split_overlap is quarantined. oot-60fps build: every option is on by default except bounds
+// (this tree keeps its own range cache), which EDEN_NX2_PERF_ON=bounds turns on. Frizti kept
+// frames_ahead, clean_words, index_rebind, submit_budget, fence_flush, fragment_barrier,
+// front_sleep and async_pipelines off after zortos293/Lichii#161's slab of wrong geometry in
+// Kokiri Forest; with all eight on, OoT played through Kokiri Forest without it and averaged
+// 51 fps instead of 45 (frames_ahead alone takes enclosed areas to 60).
 // EDEN_NX2_PERF_OPT=0 turns every one off for the A/B; EDEN_NX2_PERF_OFF=<name>,... turns off
 // only those named (Opt below). EDEN_NX2_PERF_VERIFY=1 computes each optimized answer the old
 // way too, logs any difference and uses the old answer.
@@ -83,11 +84,7 @@ inline bool On(Opt opt) {
             }
             return bits;
         };
-        const unsigned default_off = bit(Opt::FramesAhead) | bit(Opt::CleanWords) |
-                                     bit(Opt::IndexRebind) | bit(Opt::SubmitBudget) |
-                                     bit(Opt::FenceFlush) | bit(Opt::FragmentBarrier) |
-                                     bit(Opt::FrontSleep) | bit(Opt::AsyncPipelines) |
-                                     bit(Opt::Bounds);
+        const unsigned default_off = bit(Opt::Bounds);
         unsigned mask = (default_off & ~names("EDEN_NX2_PERF_ON")) | names("EDEN_NX2_PERF_OFF");
         mask |= bit(Opt::SplitOverlap);
         if (const char* value = std::getenv("EDEN_NX2_PERF_FRAMES_AHEAD"); value && value[0] == '0') {

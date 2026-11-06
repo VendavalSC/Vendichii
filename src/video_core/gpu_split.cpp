@@ -464,7 +464,14 @@ bool GpuSplit::WaitFor(u64 target, DrainSite site) {
 }
 
 void GpuSplit::Backoff(u32 spins, u64 target) {
-    if (spins < 16384) {
+    // Pauses before sleeping; EDEN_NX2_FRONT_SPINS=<n> sets it. 999sian/Lichii 7422d906aa spins
+    // 256, but on a Ryzen 5 7600X waking the front that often cost more than the spinning:
+    // OoT's Kokiri Forest benchmark fell from ~49 fps to ~44 together with other changes.
+    static const u32 spin_limit = [] {
+        const char* const value = std::getenv("EDEN_NX2_FRONT_SPINS");
+        return value != nullptr ? static_cast<u32>(std::strtoul(value, nullptr, 10)) : 16384U;
+    }();
+    if (spins < spin_limit) {
         Pause();
         return;
     }
