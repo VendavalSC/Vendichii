@@ -15,14 +15,19 @@ namespace UpdateChecker {
 namespace {
 
 std::optional<u64> ParseBuildNumber(std::string_view tag) {
-    constexpr std::string_view prefix = "build-";
-    if (!tag.starts_with(prefix)) {
+    constexpr std::string_view build_prefix = "build-";
+    std::string_view digits = tag;
+    if (tag.starts_with(build_prefix)) {
+        digits.remove_prefix(build_prefix.size());
+    } else if (tag.size() > 1 && (tag.front() == 'v' || tag.front() == 'V')) {
+        digits.remove_prefix(1);
+    } else {
         return std::nullopt;
     }
-    tag.remove_prefix(prefix.size());
+
     u64 number{};
-    const auto [end, error] = std::from_chars(tag.data(), tag.data() + tag.size(), number);
-    if (error != std::errc{} || end != tag.data() + tag.size() || number == 0) {
+    const auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), number);
+    if (error != std::errc{} || end != digits.data() + digits.size() || number == 0) {
         return std::nullopt;
     }
     return number;

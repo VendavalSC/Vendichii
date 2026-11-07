@@ -57,23 +57,36 @@ std::vector<Asset> Release::GetPlatformAssets(std::string_view platform,
 
     const std::string host_url = "https://github.com";
     const auto path = fmt::format("/{}/releases/download/{}/", Common::g_build_auto_update_repo, tag);
+
+    std::string asset_platform{platform};
+    if (platform == "windows-x86_64") {
+        asset_platform = "win64";
+    } else if (platform == "linux-x86_64") {
+        asset_platform = "linux-x64";
+    }
+
     for (const std::string_view variant : pgo ? std::vector<std::string_view>{"-pgo", ""}
                                               : std::vector<std::string_view>{""}) {
         for (const auto extension : extensions) {
-            const auto filename = fmt::format("lichii-{}{}{}", platform, variant, extension);
-            const auto url = host_url + path + filename;
-            if (std::ranges::find(assets, url) == assets.end()) {
-                continue;
+            std::vector<std::string> filenames;
+            filenames.push_back(
+                fmt::format("Lichii-{}-{}{}{}", tag, asset_platform, variant, extension));
+            filenames.push_back(fmt::format("lichii-{}{}{}", platform, variant, extension));
+            for (const auto& filename : filenames) {
+                const auto url = host_url + path + filename;
+                if (std::ranges::find(assets, url) == assets.end()) {
+                    continue;
+                }
+                Asset asset{.name = variant.empty() ? "Standard" : "PGO",
+                            .url = host_url,
+                            .path = path + filename,
+                            .filename = filename};
+                if (const auto info = asset_info.find(url); info != asset_info.end()) {
+                    asset.sha256 = info->second.sha256;
+                    asset.size = info->second.size;
+                }
+                return {std::move(asset)};
             }
-            Asset asset{.name = variant.empty() ? "Standard" : "PGO",
-                        .url = host_url,
-                        .path = path + filename,
-                        .filename = filename};
-            if (const auto info = asset_info.find(url); info != asset_info.end()) {
-                asset.sha256 = info->second.sha256;
-                asset.size = info->second.size;
-            }
-            return {std::move(asset)};
         }
     }
     return {};
