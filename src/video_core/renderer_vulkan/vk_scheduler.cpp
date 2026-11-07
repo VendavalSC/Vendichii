@@ -25,7 +25,6 @@
 #include "common/dkb_cpu_trace.h"
 #include "common/thread.h"
 #include "video_core/gpu_logging/gpu_logging.h"
-#include "video_core/nx2_perf.h"
 #include "video_core/nx2_profile.h"
 #include "video_core/renderer_vulkan/vk_command_pool.h"
 #include "video_core/renderer_vulkan/vk_graphics_pipeline.h"
@@ -191,10 +190,7 @@ bool Scheduler::DeferFlush() {
         if (value != nullptr) {
             return static_cast<s64>(std::atoll(value));
         }
-        // 0 by default (EvilOOT's flash fix): Ocarina of Time flashed white with the 500 us batch
-        // (sword boulder with preflush: 31 whole-screen flashes in 30 s, 0 without), and ran
-        // faster without it (Lake Hylia 52.3 -> 55.4 fps). EDEN_NX2_FENCE_FLUSH_US=500 restores it.
-        return VideoCommon::Nx2Perf::On(VideoCommon::Nx2Perf::Opt::FenceFlush) ? s64{5000} : s64{0};
+        return s64{500};
     }();
     if (interval_us <= 0 || !VideoCommon::GpuSplit::OnBackThread() ||
         std::chrono::steady_clock::now() - last_flush >= std::chrono::microseconds{interval_us}) {
@@ -226,17 +222,9 @@ bool Scheduler::WaitSubmitted(u64 tick) {
         }
         if (const auto now = std::chrono::steady_clock::now(); now >= next_log) {
             next_log = now + std::chrono::seconds{2};
-            // The back serves the request between entries: one that never does is blocked in
-            // an entry. Name the wait when it is a tracked one (BackWaitScope).
-            const char* const back_site = VideoCommon::back_wait_site.load(std::memory_order_relaxed);
-            LOG_WARNING(Render_Vulkan,
-                        "Waited {} s for the GPU thread to submit tick {} (submitted up to {}); "
-                        "GPU back thread blocked in: {}",
+            LOG_WARNING(Render_Vulkan, "Waited {} s for the GPU thread to submit tick {}",
                         std::chrono::duration_cast<std::chrono::seconds>(now - start).count(),
-                        tick, master_semaphore->CurrentTick() - 1,
-                        back_site != nullptr ? back_site
-                                             : "no tracked wait (an untracked lock or wait, or "
-                                               "a long entry)");
+                        tick);
             split.RequestIdleHook();
         }
         if (spins < 64) {
@@ -552,8 +540,6 @@ void Scheduler::WorkerThread(std::stop_token stop_token) {
             // Perform the work, tracking whether the chunk was a submission
             // before executing.
             const bool has_submit = work->HasSubmit();
-            Common::Nx2Timeline::Span timeline_span{has_submit ? "record commands + submit"
-                                                               : "record commands"};
             work->ExecuteAll(current_cmdbuf, current_upload_cmdbuf);
 
             // If the chunk was a submission, reallocate the command buffer.

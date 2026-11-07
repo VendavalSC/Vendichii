@@ -50,6 +50,38 @@ constexpr size_t INST_SIZE = sizeof(u64);
 
 using Maxwell = Tegra::Engines::Maxwell3D::Regs;
 
+// Constant buffer slots that held a null pointer when the program was translated and were
+// therefore not bound as storage buffers. A later non-null value makes the translation stale.
+static std::vector<std::pair<u32, u32>> NullStoragePointerSlots(
+    const ::Common::unordered_map<u64, u32>& cbuf_values,
+    const ::Common::unordered_map<u64, u8>& storage_pointer_types) {
+    std::vector<std::pair<u32, u32>> slots;
+    for (const auto& [key, type] : storage_pointer_types) {
+        if (type != 0 || (key >> 63) != 0) {
+            continue;
+        }
+        const auto low = cbuf_values.find(key);
+        const auto high = cbuf_values.find(key + 4);
+        if (low != cbuf_values.end() && high != cbuf_values.end() && low->second == 0 &&
+            high->second == 0) {
+            slots.emplace_back(static_cast<u32>(key >> 32), static_cast<u32>(key));
+        }
+    }
+    return slots;
+}
+
+static std::vector<u64> MappedStoragePointerKeys(
+    const ::Common::unordered_map<u64, u8>& storage_pointer_types) {
+    std::vector<u64> keys;
+    for (const auto& [key, type] : storage_pointer_types) {
+        if (type != 0) {
+            keys.push_back(key);
+        }
+    }
+    std::ranges::sort(keys);
+    return keys;
+}
+
 // The shader hash of lowered native code (frame dump "shaders", pipeline cache keys), with a
 // version tag that isolates this experimental ABI.
 static u64 NativeShaderHash(std::span<const u64> code) {
@@ -227,6 +259,20 @@ bool GenericEnvironment::IsCbufIndirectStorageBufferPointer(u32 index, u32 offse
     return mapped;
 }
 
+std::vector<std::pair<u32, u32>> GenericEnvironment::NullStoragePointerSlots() const {
+    return VideoCommon::NullStoragePointerSlots(cbuf_values, storage_pointer_types);
+}
+
+std::vector<u64> GenericEnvironment::MappedStoragePointerKeys() const {
+    return VideoCommon::MappedStoragePointerKeys(storage_pointer_types);
+}
+
+void GenericEnvironment::KeepStoragePointers(std::span<const u64> keys) {
+    for (const u64 key : keys) {
+        storage_pointer_types.insert_or_assign(key, u8{1});
+    }
+}
+
 std::optional<u64> GenericEnvironment::Analyze() {
     if (native_source_size) {
         // Include the converted header and a version tag to isolate this experimental ABI.
@@ -267,8 +313,6 @@ size_t GenericEnvironment::ReadSizeBytes() const noexcept {
 }
 
 bool GenericEnvironment::CanBeSerialized() const noexcept {
-    // A trap guard is checked against live constants on every dispatch (ComputeShader), so a
-    // cached pipeline is only used once its guard passes (zortos293/Lichii#192, SinCuri0).
     return !has_unbound_instructions;
 }
 
@@ -347,7 +391,6 @@ void GenericEnvironment::Serialize(std::ofstream& file) const {
                        sizeof(gp_passthrough_mask));
         }
         if (stage == Shader::Stage::Task || stage == Shader::Stage::Mesh) {
-            // Task and mesh programs are translated with these (none were stored before).
             file.write(reinterpret_cast<const char*>(&mesh_registers), sizeof(mesh_registers))
                 .write(reinterpret_cast<const char*>(&mesh_primitive_header),
                        sizeof(mesh_primitive_header));
@@ -1128,6 +1171,16 @@ void FileEnvironment::Deserialize(std::ifstream& file) {
     is_proprietary_driver = texture_bound == 2 || Shader::Ampere::HasNativeAddressMap(code);
 }
 
+size_t FileEnvironment::MemorySize() const {
+    const auto map_bytes = [](const auto& map) {
+        return (map.bucket_count() + 1) *
+               (sizeof(typename std::decay_t<decltype(map)>::value_type) + 2);
+    };
+    return sizeof(*this) + code.capacity() * sizeof(u64) + map_bytes(texture_types) +
+           map_bytes(texture_pixel_formats) + map_bytes(cbuf_values) +
+           map_bytes(storage_pointer_types) + map_bytes(cbuf_replacements);
+}
+
 void FileEnvironment::Dump(u64 pipeline_hash, u64 shader_hash) {
     DumpImpl(pipeline_hash, shader_hash, code, read_highest, read_lowest, initial_offset, stage);
 }
@@ -1141,6 +1194,14 @@ u32 FileEnvironment::TranslateProgramAddress(u32 address) const {
 
 bool FileEnvironment::IsNativeProgram() const {
     return Shader::Ampere::HasNativeAddressMap(code);
+}
+
+std::vector<std::pair<u32, u32>> FileEnvironment::NullStoragePointerSlots() const {
+    return VideoCommon::NullStoragePointerSlots(cbuf_values, storage_pointer_types);
+}
+
+std::vector<u64> FileEnvironment::MappedStoragePointerKeys() const {
+    return VideoCommon::MappedStoragePointerKeys(storage_pointer_types);
 }
 
 bool FileEnvironment::IsCbufStorageBufferPointer(u32 index, u32 offset) {

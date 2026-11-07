@@ -4,7 +4,6 @@
 #pragma once
 
 #include <algorithm>
-#include "common/nx2_timeline.h"
 #include <array>
 #include <thread>
 #include <chrono>
@@ -39,9 +38,7 @@
 #include "video_core/renderer_base.h"
 #include "core/frontend/framebuffer_layout.h"
 #include "core/perf_stats.h"
-#include "core/guest_thread_profile.h"
 #include "video_core/gpu.h"
-#include "video_core/nx2_perf.h"
 #include "video_core/framebuffer_config.h"
 #include "core/core_timing.h"
 #include "core/hle/kernel/k_client_session.h"
@@ -436,27 +433,27 @@ private:
         TipcReplyWords(ctx, {1});
     }
 
-    // Used by nn::gpu::sdk::CreateGpuAddressSpace: three u64s after the result, a kind (< 5, 0 =
-    // none) and the GPU VA range of the in-process VirtualMachine that serves AllocSpace
-    // (nn::gpu::sdk::util::ExecuteVirtualMachineAllocSpace). NVN reserves fixed VA from 0x8000000
-    // up to 512 GiB, so report the same range NvRm gives AllocAsEx: [0x8000000, 0xC000000000).
+    /// Reports the GPU VA range NVN reserves, [Nx2GpuVaStart, Nx2GpuVaEnd), to
+    /// nn::gpu::sdk::CreateGpuAddressSpace. Three u64s follow the result: a kind (< 5, 0 =
+    /// none) and the range of the in-process VirtualMachine that serves AllocSpace
+    /// (nn::gpu::sdk::util::ExecuteVirtualMachineAllocSpace).
     void GetVaRange(HLERequestContext& ctx) {
         LOG_WARNING(Service, "(STUBBED) nx2:gpu TIPC 203 [2]={:#x}", ctx.CommandBuffer()[2]);
         constexpr u64 kind = 1;
-        constexpr u64 start = 0x8000000ULL;
-        constexpr u64 size = 0xC000000000ULL - start;
+        constexpr u64 start = Tegra::Nx2GpuVaStart;
+        constexpr u64 size = Tegra::Nx2GpuVaEnd - start;
         TipcReplyWords(ctx, {static_cast<u32>(kind), static_cast<u32>(kind >> 32),
                              static_cast<u32>(start), static_cast<u32>(start >> 32),
                              static_cast<u32>(size), static_cast<u32>(size >> 32)});
     }
 
-    // Newer SDKs (title 1) query the address space's user and gsv partitions with 201/202(id):
-    // two u64s each, stored as the partition's min/max. The user value works whether it is read
-    // as (start, size) or (min, max). Title 4 never needed the gsv partition, so it stays empty.
+    /// Reports the user partition (TIPC 201) as two u64s, [Nx2GpuVaStart, Nx2GpuVaEnd).
+    /// Newer SDKs (title 1) also query the gsv partition with 202. The user value works
+    /// whether it is read as (start, size) or (min, max). Title 4 leaves gsv empty.
     void GetUserPartition(HLERequestContext& ctx) {
         LOG_WARNING(Service, "(STUBBED) nx2:gpu TIPC 201 [2]={:#x}", ctx.CommandBuffer()[2]);
-        constexpr u64 first = 0x8000000ULL;
-        constexpr u64 second = 0xC000000000ULL - first;
+        constexpr u64 first = Tegra::Nx2GpuVaStart;
+        constexpr u64 second = Tegra::Nx2GpuVaEnd - first;
         TipcReplyWords(ctx, {static_cast<u32>(first), static_cast<u32>(first >> 32),
                              static_cast<u32>(second), static_cast<u32>(second >> 32)});
     }
@@ -684,16 +681,32 @@ private:
         rb.Push(ResultSuccess);
     }
 
-    // Sub 215 (nn::gpu::sdk::DestroySparseRegion): words 3-6 the range, word 8 the job slot, like
-    // 213. Drop the GPU mapping, then the backing 214 added: its SMMU mapping (in GPU-thread
-    // order) and, once the GPU thread is past that, its pages. Kept allocated, title 1 ran the
-    // pool dry within minutes and later regions had no memory at all (GPU writes to them lost).
+    /// Drops a sparse or GPU-only region (nn::gpu::sdk::DestroySparseRegion, sub 215).
+    /// Words 3-6 are the inclusive range, word 8 the job slot, like 213. The GPU mapping
+    /// goes first, then the backing 214 added: its SMMU mapping (in GPU-thread order) and,
+    /// once the GPU thread is past that, its pages. Kept allocated, title 1 ran the pool dry
+    /// within minutes and later regions had no memory at all (GPU writes to them lost).
+    /// A range that extends past the GMMU is refused whole: the page tables would keep the
+    /// part that fits, so releasing backing here would free memory that is still mapped.
     void SubDestroySparseRegion(HLERequestContext& ctx) {
         const auto* w = ctx.CommandBuffer();
         const u64 first = u64{w[3]} | (u64{w[4]} << 32);
         const u64 last = u64{w[5]} | (u64{w[6]} << 32);
         LOG_DEBUG(Service, "nx2:gpu 215 destroy sparse region [{:#x}, {:#x}] words {:#x} {:#x} {:#x} {:#x}",
                  first, last, w[1], w[2], w[7], w[8]);
+        // last is inclusive. Both ends have to sit inside the address space; `last - first + 1`
+        // is then the size PageTableOp will actually unmap.
+        if (last > first && (first >= Tegra::Nx2GpuAddressSpaceSize ||
+                             last >= Tegra::Nx2GpuAddressSpaceSize)) {
+            LOG_ERROR(Service,
+                      "nx2:gpu 215 region [{:#x}, {:#x}] extends past the {:#x}-byte GPU address "
+                      "space; leaving it mapped",
+                      first, last, Tegra::Nx2GpuAddressSpaceSize);
+            SignalAfterGpu(w[8]);
+            IPC::ResponseBuilder rb{ctx, 2};
+            rb.Push(ResultSuccess);
+            return;
+        }
         std::scoped_lock lk{m_region_mutex};
         FreeReleasedRegions();
         if (m_gpu_only_ranges.erase(first) != 0 && last > first) {
@@ -1737,18 +1750,19 @@ private:
     // client may acquire next, four zero words. Nothing is shown yet; every slot is handed back
     // at once (changes.patch's default mask is 0x7fff).
     void PresentClientBuffer(HLERequestContext& ctx) {
-        Common::Nx2Timeline::OnPresent();
-        Common::Nx2Timeline::Span timeline_span{"guest present"};
         const auto* w = ctx.CommandBuffer();
         ++m_presents;
-        if (Core::GuestThreadProfile::Enabled()) {
-            Core::GuestThreadProfile::g_present_thread.store(ctx.GetThread().GetThreadId(),
-                                                             std::memory_order_relaxed);
-        }
         if (Common::DkbFrameTrace::Enabled()) {
             m_vsync->trace_present.store(m_presents, std::memory_order_relaxed);
         }
-        Core::g_nx2_present_count.fetch_add(1, std::memory_order_relaxed);
+        const u64 present = Core::g_nx2_present_count.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (Core::g_nx2_present_time_services.load(std::memory_order_relaxed) != 0) {
+            const u64 present_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                       std::chrono::steady_clock::now().time_since_epoch())
+                                       .count();
+            Core::g_nx2_present_times_ns[present % Core::g_nx2_present_times_ns.size()].store(
+                present_ns, std::memory_order_relaxed);
+        }
         if (m_presents <= 4 || (m_presents % 600) == 0) {
             LOG_INFO(Service, "nx2:vi2 229 present #{} token={:#x} slot={} image={}", m_presents,
                      u64{w[2]} | (u64{w[3]} << 32), w[4], w[5]);
@@ -1774,26 +1788,11 @@ private:
         const u64 app_program_id = system.GetApplicationProcessProgramID();
         if (frames_ahead == -1 && app_program_id == DonkeyKongBananzaProgramId) {
             frames_ahead = 0;
-        } else if (frames_ahead == -1 && app_program_id == OcarinaOfTimeProgramId &&
-                   VideoCommon::Nx2Perf::On(VideoCommon::Nx2Perf::Opt::FramesAhead)) {
+        } else if (frames_ahead == -1 && app_program_id == OcarinaOfTimeProgramId) {
             frames_ahead = 1;
         }
-        // Ocarina keeps two frames in flight: wait only for the fence of the frame before the
-        // previous one, never for this one. With one frame ahead, a GPU still on the previous
-        // frame made this present wait for this frame as well, so the emulated GPU ran dry while
-        // the game was blocked here. Kokiri Forest benchmark: 47.1 fps with one, 48.6 with two,
-        // no visual difference. EDEN_NX2_FRAMES_IN_FLIGHT=1 goes back to one.
-        static const int frames_in_flight = [] {
-            const char* const value = std::getenv("EDEN_NX2_FRAMES_IN_FLIGHT");
-            return value != nullptr && value[0] == '1' ? 1 : 2;
-        }();
         const auto entered = std::chrono::steady_clock::now();
-        if (frames_in_flight == 2 && app_program_id == OcarinaOfTimeProgramId) {
-            WaitForFrame(m_older_fence_id, m_older_fence_value);
-            m_older_fence_id = m_previous_fence_id;
-            m_older_fence_value = m_previous_fence_value;
-        } else if (frames_ahead == 1 ||
-                   (frames_ahead == -1 && !WaitForFrame(~w[22], w[24], true))) {
+        if (frames_ahead == 1 || (frames_ahead == -1 && !WaitForFrame(~w[22], w[24], true))) {
             LOG_DEBUG(Service, "nx2:vi2 present #{} fence ({}, {:#x}), waiting for ({}, {:#x}); now {:#x}",
                       m_presents, ~w[22], w[24], m_previous_fence_id, m_previous_fence_value,
                       ~w[22] < 192 ? system.Host1x().GetSyncpointManager().GetGuestSyncpointValue(~w[22]) : 0U);
@@ -1808,13 +1807,7 @@ private:
                                     !system.Host1x().GetSyncpointManager().IsReadyGuest(
                                         m_previous_fence_id, m_previous_fence_value);
             WaitForFrame(m_previous_fence_id, m_previous_fence_value);
-            // EDEN_NX2_NO_BEHIND_WAIT=1 (Ocarina) keeps the frame ahead when the GPU is behind:
-            // waiting for this frame too drained the GPU thread's queue every time it was.
-            static const bool keep_ahead = [] {
-                const char* const value = std::getenv("EDEN_NX2_NO_BEHIND_WAIT");
-                return value != nullptr && value[0] == '1';
-            }();
-            if (gpu_behind && !(keep_ahead && app_program_id == OcarinaOfTimeProgramId)) {
+            if (gpu_behind) {
                 WaitForFrame(~w[22], w[24]);
             }
         } else if (frames_ahead == 0) {
@@ -1908,9 +1901,6 @@ private:
     } m_stats{};
     u32 m_previous_fence_id{~0U}; // none yet (WaitForFrame ignores ids >= 192)
     u32 m_previous_fence_value{};
-    /// The frame before m_previous_fence_id's (EDEN_NX2_FRAMES_IN_FLIGHT=2).
-    u32 m_older_fence_id{~0U};
-    u32 m_older_fence_value{};
 
     // The console flips one frame per 60 Hz vblank and keeps the rest queued, so a game can't
     // present faster than that. Every slot is reported free here: hold each present until the
@@ -1928,11 +1918,18 @@ private:
         bool deadline_reset{};
     } m_frame_trace;
 
-    // timing: present word 12, (swap interval << 16) | refresh rate. Fire Emblem: Fortune's Weave
-    // sends 0x1003c during its boot logos and 0x2003c (two vblanks per frame, 30 fps) after; paced
-    // at every vblank it ran at double speed. EDEN_NX2_SWAP_INTERVAL=<n> forces the interval.
+    /**
+     * Holds this present until the next vblank its word asks for, or for longer when an FPS limit
+     * (the setting, or EDEN_NX2_FPS_LIMIT) is below that rate.
+     *
+     * Fire Emblem: Fortune's Weave sends 0x1003c during its boot logos and 0x2003c (two vblanks
+     * per frame, 30 fps) after; paced at every vblank it ran at double speed.
+     * EDEN_NX2_SWAP_INTERVAL=<n> forces the interval.
+     *
+     * @param timing  Present word 12: (swap interval << 16) | refresh rate.
+     * @param process Owning process, for the Mario Kart World dynamic FPS case; may be null.
+     */
     void PaceToVblank(u32 timing, const Kernel::KProcess* process) {
-        Common::Nx2Timeline::Span timeline_span{"present: pace to vblank"};
         const bool trace = Common::DkbFrameTrace::Enabled();
         if (trace) {
             if (m_frame_trace.previous_word && *m_frame_trace.previous_word != timing) {
@@ -1960,46 +1957,32 @@ private:
         if (forced_interval != 0) {
             swap_interval = forced_interval;
         }
-        // Ocarina of Time's 30 FPS mode (lower-end PCs): two vblanks a frame. Its frame step
-        // follows the time measured (Dynamic FPS by Dark), so it keeps full speed.
-        constexpr u64 OcarinaOfTimeId = 0x0400486024DEC000ULL;
-        if (process != nullptr && process->GetProgramId() == OcarinaOfTimeId &&
-            Settings::values.oot_30fps.GetValue()) {
-            swap_interval = (std::max)(swap_interval, 2U);
-        }
         const u32 refresh_rate = (timing & 0xffff) >= 30 && (timing & 0xffff) <= 240 ? timing & 0xffff : 60;
         if (trace) {
             m_frame_trace.interval = swap_interval;
             m_frame_trace.refresh = refresh_rate;
             m_frame_trace.forced = forced_interval;
         }
-        if (!Settings::values.use_speed_limit.GetValue() || Settings::SpeedLimit() == 0) {
-            VideoCommon::Nx2Perf::g_guest_frame_interval_ns.store(0, std::memory_order_relaxed);
+        static const u32 forced_fps_limit = [] {
+            const char* value = std::getenv("EDEN_NX2_FPS_LIMIT");
+            return value ? static_cast<u32>(std::strtoul(value, nullptr, 10)) : 0U;
+        }();
+        const u32 fps_limit =
+            forced_fps_limit != 0 ? forced_fps_limit : Settings::values.fps_limit.GetValue();
+        const bool speed_limited =
+            Settings::values.use_speed_limit.GetValue() && Settings::SpeedLimit() != 0;
+        if (!speed_limited && fps_limit == 0) {
             return;
         }
         if (timing != std::exchange(m_swap_word, timing)) {
-            LOG_INFO(Service, "nx2:vi2 present #{} swap interval {} at {} Hz (word 12 = {:#x})",
-                     m_presents, swap_interval, refresh_rate, timing);
+            LOG_INFO(Service,
+                     "nx2:vi2 present #{} swap interval {} at {} Hz, FPS limit {} (word 12 = {:#x})",
+                     m_presents, swap_interval, refresh_rate, fps_limit, timing);
         }
-        auto interval = std::chrono::nanoseconds{
-            100'000'000'000LL * swap_interval / refresh_rate / Settings::SpeedLimit()};
-        // Genlock: with the host frame pacer on, a frame period within 1% of a whole number of
-        // display refreshes becomes exactly that many measured refreshes (a "120 Hz" display at
-        // 119.98 Hz: 33.3389 ms instead of 33.3333). On the game's own clock its frames drifted
-        // against the display and missed their refresh about once a minute (a 41 ms frame, then
-        // a short one). The game runs at most 1% slower.
-        if (const long long host_refresh =
-                VideoCommon::Nx2Perf::g_host_refresh_ns.load(std::memory_order_relaxed);
-            host_refresh > 0) {
-            const long long refreshes =
-                (interval.count() + host_refresh / 2) / host_refresh;
-            const long long locked = refreshes * host_refresh;
-            if (refreshes >= 1 && std::abs(locked - interval.count()) * 100 < interval.count()) {
-                interval = std::chrono::nanoseconds{locked};
-            }
-        }
-        VideoCommon::Nx2Perf::g_guest_frame_interval_ns.store(interval.count(),
-                                                              std::memory_order_relaxed);
+        const auto vblank_interval = std::chrono::nanoseconds{
+            100'000'000'000LL * swap_interval / refresh_rate /
+            (speed_limited ? Settings::SpeedLimit() : 100)};
+        const auto interval = PacedInterval(vblank_interval, fps_limit);
         if (trace) {
             m_frame_trace.target_ms = std::chrono::duration<double, std::milli>(interval).count();
         }
@@ -2031,7 +2014,6 @@ private:
     /// GPU channel was seen suspended on a semaphore (it may be one this thread releases later).
     /// Returns whether the fence was reached.
     bool WaitForFrame(u32 fence_id, u32 fence_value, bool unless_gpu_waits = false) {
-        Common::Nx2Timeline::Span timeline_span{"present: wait for frame fence"};
         if (fence_id >= 192) {
             return true;
         }
@@ -2096,7 +2078,6 @@ private:
     // shown_size: the present's word 7, ((height - 1) << 16) | (width - 1) of the area the game drew
     // into from the image's top-left corner (0 when it gives none).
     void Composite(u32 image_id, u32 fence_id, u32 fence_value, u32 shown_size) {
-        Common::Nx2Timeline::Span timeline_span{"present: composite"};
         u64 address{};
         u32 parent{};
         u64 parent_offset{};
