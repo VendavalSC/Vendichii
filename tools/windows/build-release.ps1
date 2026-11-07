@@ -6,9 +6,11 @@
 #
 # By default it compiles with 4 jobs at below-normal priority so the PC stays quiet and usable;
 # -Jobs 0 uses every core at normal priority.
+# -Clang builds in build\clang with LLVM's clang-cl, ThinLTO and eglantine.profdata (PGO).
 
 param(
     [switch]$Reconfigure,
+    [switch]$Clang,
     [int]$Jobs = 4
 )
 
@@ -19,7 +21,21 @@ if ($Jobs -gt 0) {
     (Get-Process -Id $PID).PriorityClass = "BelowNormal"
 }
 $repo = Resolve-Path "$PSScriptRoot\..\.."
-$build = "$repo\build\release"
+$build = if ($Clang) { "$repo\build\clang" } else { "$repo\build\release" }
+$clangArgs = @()
+if ($Clang) {
+    $llvm = "$env:ProgramFiles/LLVM/bin" -replace '\\', '/'
+    $profile = "$repo/eglantine.profdata" -replace '\\', '/'
+    $pgo = "/clang:-fprofile-use=$profile -Wno-backend-plugin -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date"
+    $clangArgs = @(
+        "-DCMAKE_C_COMPILER=$llvm/clang-cl.exe",
+        "-DCMAKE_CXX_COMPILER=$llvm/clang-cl.exe",
+        "-DCMAKE_LINKER=$llvm/lld-link.exe",
+        "-DCMAKE_C_FLAGS=/DWIN32 /D_WINDOWS /D_USE_STD_VECTOR_ALGORITHMS=0 $pgo",
+        "-DCMAKE_CXX_FLAGS=/DWIN32 /D_WINDOWS /D_USE_STD_VECTOR_ALGORITHMS=0 /EHsc /GR $pgo",
+        "-DENABLE_LTO=ON"
+    )
+}
 
 . "$PSScriptRoot\load-msvc-env.ps1"
 
@@ -53,7 +69,7 @@ if ($Reconfigure -or !(Test-Path "$build\CMakeCache.txt")) {
         -DLICHII_BUILD_PLATFORM=windows-x86_64 `
         -DUSE_DISCORD_PRESENCE=OFF `
         -DLICHII_LINK_ICF=OFF `
-        @tlsArgs
+        @tlsArgs @clangArgs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
