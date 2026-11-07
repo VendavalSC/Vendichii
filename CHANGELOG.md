@@ -1,11 +1,117 @@
 # Changelog
 
-All notable changes to Eglantine are documented here. Each release's notes are taken from its
-`## [X.Y.Z]` section (release candidates use the section of the version they are a candidate for).
-New entries go under `## [Unreleased]`; `tools/ci/bump-version.sh` turns them into a version section.
+All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
-## [Unreleased]
+## v18
 
-## [0.1.0]
+- Movie video now stays in sync with its audio, with late-frame dropping, movie
+  pacing and faster streaming for Switch 2 titles (upstream #659).
+- Fixed an RDNA2 GPU crash caused by cooperative-matrix HMMA (upstream #657).
+- Windows and Linux, standard and PGO.
 
-- Initial release candidate
+## v17
+
+- Ocarina of Time cutscenes now stay in sync with their audio below 60 fps: late
+  movie frames are dropped, movie pacing is always on, and Switch 2 titles no
+  longer pay the SD-card read throttle that delayed streamed video.
+- NVIDIA DLSS for OoT: the effects mask is now handed to Streamline in a format
+  it accepts, so the glow and particle fix works. DLSS presets E and F are now
+  selectable.
+- Windows and Linux, standard and PGO.
+
+## v16
+
+- NVIDIA DLSS is now available on Windows. Enable it in Graphics settings and
+  use the download button under the option to fetch NVIDIA's Streamline and DLSS
+  files. Requires a GeForce RTX card; AMD and Intel keep FSR 3.1.
+- Option to bypass Ocarina of Time's sharpening anti-aliasing network.
+- Fix for night-time smear and flicker from Navi's glow, fireflies and dust when
+  DLSS is on.
+- Windows and Linux, standard and PGO.
+
+## v15
+
+- Adds NVIDIA DLSS Super Resolution for Ocarina of Time and task/mesh pipelines
+  through compute on GPUs without `VK_EXT_mesh_shader`.
+- PGO builds verified and kept for Windows and Linux.
+- Windows and Linux, standard and PGO.
+
+## v14
+
+- The OoT grass/foliage fix is now upstream: Hyrule Field's grass stays dense and
+  Castle Town's near hedges keep their leaves.
+- Cooperative-matrix HMMA for OoT (+12–24% standing/walking, RDNA4 41 → 60 fps),
+  float16 support for LSFG frame generation, Dynamic FPS down to 10 fps, a 50 µs
+  GPU-thread poll, texture-cache out-of-memory handling and framebuffer limits.
+- Windows and Linux, standard and PGO.
+
+## v13
+
+- In-place AppImage updates with one rollback copy.
+- Windows and Linux, standard and PGO.
+
+## v12
+
+- The built-in updater now points at this repository and finds `Lichii-vN-…`
+  releases.
+- Added device-loss diagnostics and frame-generation status in the status bar.
+- Windows packages use bundled static FFmpeg.
+- Windows and Linux, standard and PGO.
+
+## v11
+
+- Upstream fixes for OoT far-field sky haze, NaN handling, QMD release formats,
+  microphone capture and NUP metadata.
+- Windows packages use bundled static FFmpeg.
+- Windows and Linux, standard and PGO.
+
+## v10
+
+- 43 upstream commits: 64-byte usage tracking, 32-bit global atomics, dynamic
+  per-tap offsets, macro hand-back, Turing macro RAM, gathered-buffer lifetime,
+  address-wrap rejection and game-list crash fixes.
+- Windows and Linux, standard and PGO.
+
+## 261106-v9
+
+- Reviewed candidate fixes: NaN-defined min/max, QMD release formats,
+  framebuffer limits, texture-cache OOM retries and mesh-shader logging.
+- Windows and Linux, standard and PGO.
+
+## 261106-v8
+
+- Upstream OoT split-deadlock fix, GPU back bookkeeping, quad index growth,
+  paired cbuf pointer and CPU-write download guard.
+- Windows and Linux, standard and PGO.
+
+## 261106-v7
+
+- Opt-in desktop compatibility reports and Linux AppImage switch discovery.
+- Windows and Linux, standard and PGO.
+
+## 261106-v6
+
+- Ocarina of Time now asks on launch whether to use recommended performance
+  settings (FSR3, GPU accuracy Low, GPU NVDEC, async presentation and async
+  shaders). Session-only; saved preferences are unchanged. New desktop configs
+  receive those values as first-run defaults.
+- GPU thread wake from the sharkiix work.
+- Windows and Linux, standard and PGO.
+
+## 261106-v4
+
+- Async native draw discard, worker lost-wake fix, misaligned SSBO and compute
+  write ordering fixes.
+- GPU thread wake: queued commands wake the GPU thread immediately.
+- Windows and Linux, standard and PGO.
+
+## 261106-v3
+
+- Async native discard stops draws stalling on unbuilt pipelines.
+- Windows and Linux, standard and PGO.
+
+## 261106-v2
+
+- First release with the full curated superbuild fix set: Bananza page-mark
+  batching, OoT reticle, GPU split, Frizti ports, mja00 fixes and AMD fixes.
+- Windows and Linux, standard and PGO.

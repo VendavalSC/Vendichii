@@ -1,5 +1,19 @@
 # Lichii Superbuild (unofficial)
 
+## Credits
+
+This build exists because of the work of:
+
+- [zortos293/Lichii](https://github.com/zortos293/Lichii) — base `nx2`, compatibility reports, first-run performance defaults, Bananza page-mark batching, perf9 paths
+- [jojo-chaechae/Eglantine](https://github.com/jojo-chaechae/Eglantine) — GPU-split submit and macro hand-back fixes
+- [Duck912/Eglantine-ducky](https://github.com/Duck912/Eglantine-ducky) — OoT reticle/CPU-write fix and near-leaf pointer fix
+- [Frizti/Lichii](https://github.com/Frizti/Lichii) — scoped buffer/submission/FSR3 fixes and Dynamic FPS
+- [mja00/Lichii](https://github.com/mja00/Lichii) — uniform-bank upload, query timing, HMMA unroll
+- [Nolar-Hack/Lichii](https://github.com/Nolar-Hack/Lichii) — video swap-interval, compute sizing, scheduler exclusion, guest RAM release, texture-cache threshold
+- [BrunoSilvestre00](https://github.com/BrunoSilvestre00) — async native draw discard (PR #224)
+- [Shakoquo/Lichii-sharkiix-version](https://github.com/Shakoquo/Lichii-sharkiix-version) — GPU thread wake and AMD/OoT tuning experiments
+- The Eglantine, Eden, yuzu and Sudachi contributors
+
 Curated performance and correctness fixes on top of
 [zortos293/Lichii](https://github.com/zortos293/Lichii) `nx2`.
 
@@ -11,26 +25,68 @@ a stock build as fallback.
 
 - Upstream: `zortos293/Lichii`
 - Branch: `nx2`
-- Base commit: `e219d24c5affb2450963017dd8b07ec22618654e` (2026-11-06)
-- Upstream `nx2` already contains #273 (AMD shader typing/depth sampling) and
-  #284 (AV1 in MinGW builds); those are not re-applied here.
+- Base commit: `72e9429dafa79bea9b1b3f21c33695ab9f34c118` (2026-11-07).
+  The grass/foliage fix is now upstream as #551, so the 14-commit
+  `capy/oot-hyrule-grass-fix` series is no longer carried.
+- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
+  #295, #149, #185, #197, #203, #215, #232, #241, #397, #398, #410, #412,
+  #413, #414, #418, #425, #429, #433, #435, #438, #439, #442, #443, #444,
+  #482, #485, #490, #432, #436, #351, #504, #255/#497, #499, #512, #515,
+  #518/#519/#526, #524, #537, #509, #520, plus the 24-commit batch landing
+  #588 (TXD/ATOMG shadow registers), #584 (Dynamic FPS down to 10 fps),
+  #585 (sysmix audio), #580 (page-table walk reuse), #550 (disk-cache
+  pipelines), #465 (bounded unbuilt-pipeline wait), #333 (page-table
+  sizing), #481 (sorted RangeSet), #250 (skip empty invalidations), #174
+  (software HMMA unroll), #245 (bindless handle words), #446 (50 us GPU
+  thread poll), #440 (texture-cache OOM), #427 (framebuffer limits), #495
+  (descriptor payload growth), #530 (Linux core pinning), #270 (present FPS
+  limit), #365 (Overwolf hook disable), #484 (maximized window), #511 (MIME
+  install), #160 (ZBIC failure), #221 (IPSwitch lines), #551 (OoT grass
+  fix, 64 storage buffers and compute-pipeline rebuilds), #582/#583
+  (HMMA on VK_KHR_cooperative_matrix, OoT +12-24% and RDNA4 41->60 fps),
+  #587 (float16 for LSFG frame generation), #606
+  (NVIDIA DLSS Super Resolution for OoT), #569 (task/mesh pipelines
+  through compute without VK_EXT_mesh_shader), #616 (OoT sharpening-network
+  bypass), #574 (CI ccache), #659 (movie A/V sync, imports #571) and #657
+  (keep HMMA off AMD emulated cooperative matrices, RDNA2 crash). Those are
+  not re-applied here.
+- PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
+  and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
+  locally. PR #635 is still open upstream; PR #644 (the R16F follow-up) was
+  closed as an untested draft. If zortos lands either, rebase and drop our copy.
+- The cutscene A/V sync package carried in v17 is now upstream as #659 and was
+  dropped from this branch.
 - License: GPL-3.0-or-later, inherited from Lichii/Eden/yuzu
 
 ## Branches
 
 - `nx2` — untouched upstream snapshot used as the base
-- `superbuild` — current curated build, including all portable AMD-relevant fixes
-- `legacy/superbuild-55532` — historical 55532-based branch, kept for reference
+- `superbuild` — current curated build, including all portable fixes
 
-This repository is a standalone private mirror, not a GitHub fork-network fork.
-AMD-relevant fixes are generic and fused into the single `superbuild` branch;
-there is no separate AMD variant.
+This repository is a standalone public mirror, not a GitHub fork-network fork.
+There is no separate AMD variant.
 
 ## Releases
 
-PGO is the only published build. Normal builds are used for validation and A/B
-testing only; they are not attached to releases. The PGO profile is
-`eglantine.profdata`, built with Clang 23 and LLD.
+Standard and PGO builds are published for Windows and Linux x86_64. PGO is the
+recommended package. Both use `-fprofile-use=eglantine.profdata` (50,134 Itanium-
+mangled names, matching our MinGW/Itanium-ABI Clang): Windows with Clang 23 + LLD,
+Linux with Clang 23 + LLD, which is exactly upstream's Linux PGO method. Upstream's
+Windows PGO uses clang-cl + ThinLTO + `lichii-windows.profdata` (MSVC-ABI names);
+that profile cannot be read by our compiler, and ThinLTO was tested and reverted
+because MSYS2 ships no `llvm-ar` to index bitcode archives. Windows packages use
+bundled static FFmpeg to avoid the MSYS2 `libva.dll` false positive.
+
+Windows builds also enable NVIDIA DLSS/Streamline. Upstream gates
+`ENABLE_NVIDIA_DLSS` on `MSVC AND ARCHITECTURE_x86_64`; we relax it to
+`WIN32 AND ARCHITECTURE_x86_64` so MinGW Clang builds show the **Use NVIDIA
+DLSS** checkbox and compile the #606 / PR #635 code. The Streamline MIT headers
+come from CPM; `sl.interposer.dll` and the DLSS plugins are loaded at run time
+from the user's PC. Linux is unchanged (Streamline is Windows-only).
+
+The updater points at this repository's releases (`callme-sy/Lichii-Superbuild`,
+`vN` tags, `Lichii-vN-<platform>` assets). It is enabled in release builds only when
+`LICHII_BUILD_TAG` and `LICHII_BUILD_PLATFORM` are set at configure time.
 
 ## Included fixes
 
@@ -45,6 +101,8 @@ testing only; they are not attached to releases. The PGO profile is
 | Do not download GPU data over newer CPU writes (OoT reticle) | Duck912, `05fe0408` |
 | Submit deferred work before the split back waits on fences | GPU-split branch, `498345a5` |
 | Hand macros back when the GPU split stops | GPU-split branch, `5b1b5c0f`, conflict resolved |
+| Wake the GPU thread on a queued command | Shakoquo `sharkiix`, `28f594acc7` |
+| OoT recommended settings prompt (session-only) | superbuild UI, `capy/new-user-performance-defaults` values |
 
 ### Additional portable fixes
 
@@ -74,6 +132,8 @@ mja00 `be437dd4` and Nolar `63650298` variants are not re-applied on top of it.
 
 - `EDEN_NX2_PRELOAD_ALL_PIPELINES=1` is preset in the packaged
   `nx2_switches.txt`.
+- `EDEN_NX2_ASYNC_DISCARD=1` is preset; native draws skip unbuilt pipelines
+  instead of stalling (experimental, from PR #224).
 - `EDEN_NX2_COMPUTE_MAPPING_SIZED=1` restores the old compute-buffer sizing for
   A/B testing of the OoT overexposure candidate.
 - `EDEN_NX2_TC_MINIMUM_MIB` controls the texture-cache collection threshold.
@@ -120,16 +180,6 @@ See `tools/superbuild/README.md` for packaging notes.
 `superbuild`.
 
 ```bash
-git checkout e219d24c
+git checkout 72e9429d
 git apply patches/superbuild.patch
 ```
-
-## Credits
-
-- zortos293 and the Lichii/Eden/yuzu contributors
-- Frizti
-- mja00 / Matt Artist
-- Nolar-Hack
-- Duck912
-- jojo-chaechae
-- Everyone whose fixes were ported or referenced above
