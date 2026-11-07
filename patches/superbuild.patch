@@ -457,14 +457,15 @@ index 0000000000..79af717c28
 +git apply patches/superbuild.patch
 +```
 diff --git a/dist/nx2_switches.txt b/dist/nx2_switches.txt
-index 095ecdede4..a9a6e63a94 100644
+index 095ecdede4..68267cf6bd 100644
 --- a/dist/nx2_switches.txt
 +++ b/dist/nx2_switches.txt
-@@ -43,3 +43,4 @@ EDEN_NX2_FENCE_BATCH=1
+@@ -43,3 +43,5 @@ EDEN_NX2_FENCE_BATCH=1
  #EDEN_NX2_SPLIT_SKIP=1
  #EDEN_NX2_AUTO_STUB=1
  #EDEN_NX2_KEEP_ASTC=1
 +EDEN_NX2_PRELOAD_ALL_PIPELINES=1
++EDEN_NX2_ASYNC_DISCARD=1
 diff --git a/src/common/game_presets.h b/src/common/game_presets.h
 index 83dd4d3c3f..1379e76568 100644
 --- a/src/common/game_presets.h
