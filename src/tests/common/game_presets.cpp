@@ -117,6 +117,8 @@ TEST_CASE("OoT performance preset applies only when accepted", "[game_presets]")
     settings->nvdec_emulation.SetValue(Settings::NvdecEmulation::Cpu);
     settings->async_presentation.SetValue(false);
     settings->use_asynchronous_shaders.SetValue(false);
+    settings->sync_memory_operations.SetValue(true);
+    settings->nvidia_dlss.SetValue(false);
 
     CHECK_FALSE(
         Settings::ApplyOcarinaOfTimePreset(*settings, Settings::OcarinaOfTimeProgramId, false));
@@ -130,4 +132,6 @@ TEST_CASE("OoT performance preset applies only when accepted", "[game_presets]")
     CHECK(settings->nvdec_emulation.GetValue() == Settings::NvdecEmulation::Gpu);
     CHECK(settings->async_presentation.GetValue());
     CHECK(settings->use_asynchronous_shaders.GetValue());
+    CHECK_FALSE(settings->sync_memory_operations.GetValue());
+    CHECK(settings->nvidia_dlss.GetValue());
 }

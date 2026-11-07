@@ -2129,8 +2129,9 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
             QMessageBox::question(
                 this, tr("Recommended Ocarina of Time settings"),
                 tr("Use the recommended performance settings for Ocarina of Time?\n\n"
-                   "FSR3 scaling, GPU accuracy Low, GPU NVDEC, asynchronous presentation and "
-                   "asynchronous shaders.\n\n"
+                   "FSR3 scaling, GPU accuracy Low, GPU NVDEC, asynchronous presentation, "
+                   "asynchronous shaders, NVIDIA DLSS where available and no memory operation "
+                   "syncs.\n\n"
                    "They apply until Lichii is closed. Your saved settings are not changed."),
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
         LOG_INFO(Config, "OoT recommended settings accepted: {}", use_recommended_oot_settings);
