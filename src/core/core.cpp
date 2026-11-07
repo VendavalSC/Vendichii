@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <atomic>
 #include <memory>
+#include <new>
 #include <utility>
 
 #include "game_settings.h"
@@ -25,7 +26,6 @@
 #include "core/cpu_manager.h"
 #include "core/debugger/debugger.h"
 #include "core/debugger/nx2_debug_tools.h"
-#include "core/guest_thread_profile.h"
 #include "core/device_memory.h"
 #include "core/file_sys/card_image.h"
 #include "core/file_sys/content_archive.h"
@@ -79,6 +79,9 @@
 namespace Core {
 
 std::atomic<u64> g_nx2_present_count{};
+static_assert(std::atomic<u64>::is_always_lock_free);
+std::array<std::atomic<u64>, 4096> g_nx2_present_times_ns{};
+std::atomic<u32> g_nx2_present_time_services{};
 
 FileSys::VirtualFile GetGameFileFromPath(const FileSys::VirtualFilesystem& vfs,
                                          const std::string& path) {
@@ -188,8 +191,15 @@ struct System::Impl {
 
     u64 program_id;
 
-    void Initialize(System& system) {
-        device_memory.emplace();
+    bool Initialize(System& system) {
+        try {
+            device_memory.emplace();
+        } catch (const std::bad_alloc&) {
+            LOG_CRITICAL(Core, "Failed to allocate guest memory");
+        }
+        if (device_memory && !device_memory->buffer.BackingBasePointer()) {
+            device_memory.reset();
+        }
 
         is_multicore = Settings::values.use_multi_core.GetValue();
         memory_layout = Settings::values.memory_layout_mode.GetValue();
@@ -213,6 +223,7 @@ struct System::Impl {
         kernel.SetMulticore(is_multicore);
         cpu_manager.SetMulticore(is_multicore);
         cpu_manager.SetAsyncGpu(is_async_gpu);
+        return device_memory.has_value();
     }
 
     void ReinitializeIfNecessary(System& system) {
@@ -332,12 +343,17 @@ struct System::Impl {
         debugger.emplace(system, port);
     }
 
-    void InitializeKernel(System& system) {
+    SystemResultStatus InitializeKernel(System& system) {
         LOG_DEBUG(Core, "initialized OK");
 
         // Setting changes may require a full system reinitialization (e.g., disabling multicore).
         ReinitializeIfNecessary(system);
+        if (!device_memory) {
+            LOG_CRITICAL(Core, "Not enough host memory to start the guest kernel");
+            return SystemResultStatus::ErrorMemoryAllocation;
+        }
         kernel.Initialize();
+        return SystemResultStatus::Success;
     }
 
     SystemResultStatus SetupForApplicationProcess(System& system, Frontend::EmuWindow& emu_window) {
@@ -398,8 +414,19 @@ struct System::Impl {
                                               : Common::WallClock::CNTFRQ;
         Common::g_wall_clock.SetGuestCNTFRQ(cntfrq);
         LOG_INFO(Core, "Guest counter frequency: {} Hz", cntfrq);
+        // The guest clocks derive from the host TSC calibration (or the OS clock). A wrong rate
+        // there skews every guest timer by a constant factor (#105), so record what was measured:
+        // tsc vs the CPUID base/max frequency is a sanity check at a glance.
+#ifdef ARCHITECTURE_x86_64
+        LOG_INFO(Core, "Host clock: tsc {} Hz, cpu base {} MHz, max {} MHz, invariant {}",
+                 Common::g_cpu_caps.tsc_frequency, Common::g_cpu_caps.base_frequency,
+                 Common::g_cpu_caps.max_frequency, Common::g_cpu_caps.invariant_tsc);
+#endif
 
-        InitializeKernel(system);
+        const auto kernel_result = InitializeKernel(system);
+        if (kernel_result != SystemResultStatus::Success) {
+            return kernel_result;
+        }
 
         if (params.applet_type == Service::AM::AppletType::Application) {
             current_application_filepath = filepath;
@@ -493,12 +520,10 @@ struct System::Impl {
         }
         debug_service = Nx2Debug::MaybeStartService(system, name, params.program_id);
         Nx2Sampler::StartFromEnvironment();
-        guest_thread_profile = GuestThreadProfile::Start(kernel);
         return SystemResultStatus::Success;
     }
 
     void ShutdownMainProcess() {
-        guest_thread_profile = {};
         debug_service.reset();
         SetShuttingDown(true);
         Common::ADPF::Shutdown();
@@ -592,8 +617,6 @@ struct System::Impl {
     std::optional<Service::KernelHelpers::ServiceContext> general_channel_context;
     std::optional<Service::Event> general_channel_event;
     std::optional<Core::PerfStats> perf_stats;
-    /// EDEN_GUEST_THREAD_PROFILE; reset first in ShutdownMainProcess, while the kernel is up.
-    std::jthread guest_thread_profile;
     std::optional<Tegra::Host1x::Host1x> host1x_core;
     std::optional<Core::DeviceMemory> device_memory;
     std::optional<AudioCore::AudioCore> audio_core;
@@ -652,8 +675,8 @@ const CpuManager& System::GetCpuManager() const {
     return impl->cpu_manager;
 }
 
-void System::Initialize() {
-    impl->Initialize(*this);
+bool System::Initialize() {
+    return impl->Initialize(*this);
 }
 
 void System::Run() {

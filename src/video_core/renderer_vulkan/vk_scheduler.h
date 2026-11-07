@@ -10,7 +10,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
-#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <thread>
@@ -24,10 +23,8 @@
 #include "common/dkb_frame_trace.h"
 #include "common/logging.h"
 #include "common/polyfill_thread.h"
-#include "common/nx2_timeline.h"
 #include "common/settings.h"
 #include "video_core/gpu_split.h"
-#include "video_core/gpu_wait_site.h"
 #include "video_core/renderer_vulkan/fragment_barrier_state.h"
 #include "video_core/renderer_vulkan/vk_master_semaphore.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
@@ -140,12 +137,7 @@ public:
 
     /// A dispatch was recorded: the next render pass must see what it wrote.
     void NoteComputeWrites() {
-        // EDEN_NX2_COMPUTE_BARRIERS=0 drops the compute-to-graphics barrier (A/B of its cost).
-        static const bool enabled = [] {
-            const char* const value = std::getenv("EDEN_NX2_COMPUTE_BARRIERS");
-            return value == nullptr || value[0] != '0';
-        }();
-        compute_writes_pending = enabled;
+        compute_writes_pending = true;
     }
 
     /// Returns true when a render pass is currently active in the scheduler state.
@@ -248,8 +240,6 @@ public:
             if (tick >= master_semaphore->CurrentTick()) {
                 Flush();
             }
-            VideoCommon::BackWaitScope wait_scope{"Scheduler::Wait (host GPU execution)"};
-            Common::Nx2Timeline::Span timeline_span{"wait for host GPU"};
             master_semaphore->Wait(tick);
         }
         const auto trace_waited = trace ? std::chrono::steady_clock::now()

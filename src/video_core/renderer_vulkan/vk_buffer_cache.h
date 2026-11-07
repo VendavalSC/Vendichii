@@ -133,6 +133,8 @@ public:
 
     void Finish();
 
+    void FinishForHostRead();
+
     u64 GetDeviceLocalMemory() const;
 
     u64 GetDeviceMemoryUsage() const;
@@ -142,6 +144,9 @@ public:
     u32 GetUniformBufferAlignment() const;
 
     u32 GetStorageBufferAlignment() const;
+
+    /// Largest range a storage buffer binding may have
+    u64 GetMaxStorageBufferRange() const;
 
     [[nodiscard]] StagingBufferRef UploadStagingBuffer(size_t size);
 
