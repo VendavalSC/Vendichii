@@ -6,7 +6,6 @@
 #include <cmath>
 #include <cstring>
 #include <string>
-#include <string_view>
 
 #ifdef HAS_OPENGL
 #include <glad/glad.h>

@@ -207,9 +207,8 @@ struct Values {
 
     // Core
     SwitchableSetting<bool> use_multi_core{linkage, true, "use_multi_core", Category::Core};
-    // 8 GB: Ocarina of Time's own memory size (the Frizti builds are tuned for it).
     SwitchableSetting<MemoryLayout, true> memory_layout_mode{linkage,
-                                                             MemoryLayout::Memory_8Gb,
+                                                             MemoryLayout::Memory_4Gb,
                                                              "memory_layout_mode",
                                                              Category::Core,
                                                              Specialization::Default,
@@ -354,9 +353,8 @@ struct Values {
     SwitchableSetting<ResolutionSetup> resolution_setup{linkage, ResolutionSetup::Res1X,
                                                         "resolution_setup", Category::Renderer};
 
-    // Mailbox: the host frame pacer (vk_host_pacer.h) times presents to the display itself.
     SwitchableSetting<VSyncMode, true> vsync_mode{linkage,
-                                                  VSyncMode::Mailbox,
+                                                  VSyncMode::Fifo,
                                                   "use_vsync",
                                                   Category::Renderer,
                                                   Specialization::RuntimeList,
@@ -539,9 +537,11 @@ struct Values {
                                          linkage, 0, "bg_blue", Category::Renderer, Specialization::Default, true, true};
 
     SwitchableSetting<GpuAccuracy, true> gpu_accuracy{linkage,
-                                                      // Low on desktop too: the Frizti builds are
-                                                      // tuned for Ocarina of Time there.
+#ifdef __ANDROID__
                                                       GpuAccuracy::Low,
+#else
+                                                      GpuAccuracy::High,
+#endif
                                                       "gpu_accuracy",
                                                       Category::RendererAdvanced,
                                                       Specialization::Default,
@@ -573,8 +573,7 @@ struct Values {
                                                            "vram_usage_mode",
                                                            Category::RendererAdvanced};
 
-    // GPU: Ocarina's cutscene videos.
-    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Gpu,
+    SwitchableSetting<NvdecEmulation> nvdec_emulation{linkage, NvdecEmulation::Cpu,
                                                       "nvdec_emulation", Category::RendererAdvanced};
 
     SwitchableSetting<AnisotropyMode, true> max_anisotropy{linkage,
@@ -650,12 +649,6 @@ struct Values {
     SwitchableSetting<bool> use_video_framerate{linkage, false, "use_video_framerate",
                                                 Category::RendererAdvanced};
 
-    // Ocarina of Time: present at 30 fps for lower-end PCs (nx2_gsv.h PaceToVblank). The game's
-    // timing follows real time (Dynamic FPS by Dark), so it keeps full speed. Asked once at the
-    // first launch (oot_fps_asked).
-    SwitchableSetting<bool> oot_30fps{linkage, false, "oot_30fps", Category::RendererAdvanced};
-    Setting<bool> oot_fps_asked{linkage, false, "oot_fps_asked", Category::RendererAdvanced};
-
     // Mario Kart World: select a fixed or dynamic in-game frame-rate mode (loader/nso.cpp).
     SwitchableSetting<bool> mkw_30fps{linkage, false, "mkw_30fps", Category::RendererAdvanced};
     SwitchableSetting<bool> mkw_dynamic_fps{linkage, false, "mkw_dynamic_fps",
@@ -707,9 +700,13 @@ struct Values {
                                                         Specialization::Default,
                                                         true,
                                                         true};
-    // On everywhere: the host frame pacer runs on the present thread.
-    SwitchableSetting<bool> async_presentation{linkage, true, "async_presentation",
-                                               Category::RendererHacks};
+    SwitchableSetting<bool> async_presentation{linkage,
+#ifdef __ANDROID__
+                                               true,
+#else
+                                               false,
+#endif
+                                               "async_presentation", Category::RendererHacks};
 
     SwitchableSetting<bool> fix_bloom_effects{linkage, false, "fix_bloom_effects",
                                                      Category::RendererHacks};
@@ -717,8 +714,7 @@ struct Values {
     SwitchableSetting<bool> emulate_bgr565{linkage, false, "emulate_bgr565",
                                             Category::RendererHacks};
 
-    // On: draws whose pipeline is still compiling are skipped instead of freezing the game.
-    SwitchableSetting<bool> use_asynchronous_shaders{linkage, true, "use_asynchronous_shaders",
+    SwitchableSetting<bool> use_asynchronous_shaders{linkage, false, "use_asynchronous_shaders",
                                                      Category::RendererHacks};
 
     SwitchableSetting<GpuUnswizzleSize> gpu_unswizzle_texture_size{linkage,
@@ -742,7 +738,7 @@ struct Values {
     SwitchableSetting<bool> gpu_unswizzle_enabled{linkage, false, "gpu_unswizzle_enabled",
                                                   Category::RendererHacks};
 
-    SwitchableSetting<bool> pin_gpu_threads{linkage, true, "pin_gpu_threads",
+    SwitchableSetting<bool> pin_gpu_threads{linkage, false, "pin_gpu_threads",
                                             Category::RendererHacks};
 
     SwitchableSetting<ExtendedDynamicState> dyna_state{linkage,
@@ -825,9 +821,8 @@ struct Values {
 
     Setting<s32> current_user{linkage, 0, "current_user", Category::System};
 
-    // Docked: the docked rendering resolution (as Ocarina of Time on a TV).
     SwitchableSetting<ConsoleMode> use_docked_mode{linkage,
-                                                   ConsoleMode::Docked,
+                                                   ConsoleMode::Handheld,
                                                    "use_docked_mode",
                                                    Category::System,
                                                    Specialization::Radio,
