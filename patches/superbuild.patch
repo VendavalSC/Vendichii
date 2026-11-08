@@ -54,10 +54,10 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..09f6dbb901 100644
+index bc40878ce6..46c1ec98cb 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,194 @@
+@@ -1,11 +1,204 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -66,9 +66,20 @@ index bc40878ce6..09f6dbb901 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v23
++## v24
  
 -## [0.1.0]
++- Shader precache discovers every container the archive walker reads (#812),
++  improving hit coverage before a game starts.
++- Cached task/mesh pipelines are built at boot on GPUs without
++  VK_EXT_mesh_shader (#841), avoiding first-use pipeline builds.
++- All v23 features included: GPU-thread poll timer, pipeline-cache filtering,
++  OoT Zen 3 preset and build target, native HDR, NVIDIA DLSS and the full
++  superbuild set.
++- Windows and Linux, standard and PGO.
++## v23
+ 
+-- Initial release candidate
 +- Smoother GPU thread scheduling: the pending-channel poll timer resets when a
 +  channel makes progress, with shorter Windows waits (#621).
 +- Pipeline caches keep only undamaged, non-stale and non-duplicate records,
@@ -78,8 +89,7 @@ index bc40878ce6..09f6dbb901 100644
 +  the Fritchii fixes and the full superbuild set.
 +- Windows and Linux, standard and PGO.
 +## v22
- 
--- Initial release candidate
++
 +- Ocarina of Time's recommended preset now also disables memory-operation
 +  synchronization and turns on NVIDIA DLSS where available (FSR 3.1 fallback).
 +- New Zen 3 build target (`YUZU_BUILD_PRESET=zen3`) for Ryzen 5000-class CPUs.
@@ -412,10 +422,10 @@ index 0caad38d8b..e2898f2f77 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..e19463a4a3
+index 0000000000..6e69e8776f
 --- /dev/null
 +++ b/SUPERBUILD.md
-@@ -0,0 +1,207 @@
+@@ -0,0 +1,208 @@
 +# Lichii Superbuild (unofficial)
 +
 +## Credits
@@ -443,7 +453,7 @@ index 0000000000..e19463a4a3
 +
 +- Upstream: `zortos293/Lichii`
 +- Branch: `nx2`
-+- Base commit: `bf48fe92cc88e515bd51fdd497c5cd2ff9b3d37b` (2026-11-08).
++- Base commit: `ad477ef1f4b54ed48db6ce73cc990a141637e55b` (2026-11-08).
 +  The grass/foliage fix is now upstream as #551, so the 14-commit
 +  `capy/oot-hyrule-grass-fix` series is no longer carried.
 +- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -482,8 +492,9 @@ index 0000000000..e19463a4a3
 +  compute storage bounds), #296 (ASTC uploads), #821 (face-button glyphs),
 +  #818 (stale guest image uploads), #817 (join-copy upload skip), #691
 +  (Switch 2 button icons), #809 (decoder packets/movie clock), #815
-+  (pipeline-cache record filtering) and #621 (pending-channel poll timer).
-+  Those are not re-applied here.
++  (pipeline-cache record filtering), #621 (pending-channel poll timer), #812
++  (shader precache archive discovery) and #841 (cached task/mesh pipelines
++  without VK_EXT_mesh_shader). Those are not re-applied here.
 +- PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
 +  and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
 +  locally. PR #635 is still open upstream; PR #644 (the R16F follow-up) was
@@ -620,7 +631,7 @@ index 0000000000..e19463a4a3
 +`superbuild`.
 +
 +```bash
-+git checkout bf48fe92
++git checkout ad477ef1
 +git apply patches/superbuild.patch
 +```
 diff --git a/dist/nx2_switches.txt b/dist/nx2_switches.txt

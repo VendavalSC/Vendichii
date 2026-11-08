@@ -25,7 +25,7 @@ a stock build as fallback.
 
 - Upstream: `zortos293/Lichii`
 - Branch: `nx2`
-- Base commit: `bf48fe92cc88e515bd51fdd497c5cd2ff9b3d37b` (2026-11-08).
+- Base commit: `ad477ef1f4b54ed48db6ce73cc990a141637e55b` (2026-11-08).
   The grass/foliage fix is now upstream as #551, so the 14-commit
   `capy/oot-hyrule-grass-fix` series is no longer carried.
 - Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -64,8 +64,9 @@ a stock build as fallback.
   compute storage bounds), #296 (ASTC uploads), #821 (face-button glyphs),
   #818 (stale guest image uploads), #817 (join-copy upload skip), #691
   (Switch 2 button icons), #809 (decoder packets/movie clock), #815
-  (pipeline-cache record filtering) and #621 (pending-channel poll timer).
-  Those are not re-applied here.
+  (pipeline-cache record filtering), #621 (pending-channel poll timer), #812
+  (shader precache archive discovery) and #841 (cached task/mesh pipelines
+  without VK_EXT_mesh_shader). Those are not re-applied here.
 - PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
   and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
   locally. PR #635 is still open upstream; PR #644 (the R16F follow-up) was
@@ -202,6 +203,6 @@ See `tools/superbuild/README.md` for packaging notes.
 `superbuild`.
 
 ```bash
-git checkout bf48fe92
+git checkout ad477ef1
 git apply patches/superbuild.patch
 ```

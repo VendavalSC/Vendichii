@@ -2,6 +2,16 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v24
+
+- Shader precache discovers every container the archive walker reads (#812),
+  improving hit coverage before a game starts.
+- Cached task/mesh pipelines are built at boot on GPUs without
+  VK_EXT_mesh_shader (#841), avoiding first-use pipeline builds.
+- All v23 features included: GPU-thread poll timer, pipeline-cache filtering,
+  OoT Zen 3 preset and build target, native HDR, NVIDIA DLSS and the full
+  superbuild set.
+- Windows and Linux, standard and PGO.
 ## v23
 
 - Smoother GPU thread scheduling: the pending-channel poll timer resets when a
