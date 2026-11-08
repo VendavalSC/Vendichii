@@ -2,6 +2,21 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v19
+
+- Mario Kart World no longer locks near 30 fps: GPU Clocks Boost and Overclock
+  once again shrink Switch 2 GPU durations (upstream #664).
+- A batch of AMD graphics fixes: occlusion query waits, non-Depth-ref compare
+  samplers, blend key rebuilds, out-of-range texture handles, pipeline cache
+  recovery after a driver rejection, uneven BCn mip handling and keeping
+  preloaded pipelines resident (upstream #679).
+- What this build adds over stock Lichii is unchanged: the OoT recommended-settings
+  prompt, GPU-split and fence fixes, fence-flagged query reports, Bananza
+  page-mark batching, the mja00 uniform-bank/HMMA work, Nolar's video,
+  scheduler and texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and
+  `ASYNC_DISCARD` presets, and an updater pointed at this repository.
+- Windows and Linux, standard and PGO.
+
 ## v18
 
 - Movie video now stays in sync with its audio, with late-frame dropping, movie

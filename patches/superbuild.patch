@@ -26,10 +26,10 @@ index 873b99bec2..258906d26f 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..8916640a26 100644
+index bc40878ce6..55549af435 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,117 @@
+@@ -1,11 +1,132 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -38,15 +38,30 @@ index bc40878ce6..8916640a26 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v18
++## v19
  
 -## [0.1.0]
++- Mario Kart World no longer locks near 30 fps: GPU Clocks Boost and Overclock
++  once again shrink Switch 2 GPU durations (upstream #664).
++- A batch of AMD graphics fixes: occlusion query waits, non-Depth-ref compare
++  samplers, blend key rebuilds, out-of-range texture handles, pipeline cache
++  recovery after a driver rejection, uneven BCn mip handling and keeping
++  preloaded pipelines resident (upstream #679).
++- What this build adds over stock Lichii is unchanged: the OoT recommended-settings
++  prompt, GPU-split and fence fixes, fence-flagged query reports, Bananza
++  page-mark batching, the mja00 uniform-bank/HMMA work, Nolar's video,
++  scheduler and texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and
++  `ASYNC_DISCARD` presets, and an updater pointed at this repository.
++- Windows and Linux, standard and PGO.
+ 
+-- Initial release candidate
++## v18
++
 +- Movie video now stays in sync with its audio, with late-frame dropping, movie
 +  pacing and faster streaming for Switch 2 titles (upstream #659).
 +- Fixed an RDNA2 GPU crash caused by cooperative-matrix HMMA (upstream #657).
 +- Windows and Linux, standard and PGO.
- 
--- Initial release candidate
++
 +## v17
 +
 +- Ocarina of Time cutscenes now stay in sync with their audio below 60 fps: late
@@ -267,10 +282,10 @@ index 48e0ad1f2c..a2775eec3f 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..79af717c28
+index 0000000000..4d1eb0a12c
 --- /dev/null
 +++ b/SUPERBUILD.md
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,187 @@
 +# Lichii Superbuild (unofficial)
 +
 +## Credits
@@ -298,7 +313,7 @@ index 0000000000..79af717c28
 +
 +- Upstream: `zortos293/Lichii`
 +- Branch: `nx2`
-+- Base commit: `72e9429dafa79bea9b1b3f21c33695ab9f34c118` (2026-11-07).
++- Base commit: `bf4c42e223d4812d4456d3d8f66d892571d19a13` (2026-11-08).
 +  The grass/foliage fix is now upstream as #551, so the 14-commit
 +  `capy/oot-hyrule-grass-fix` series is no longer carried.
 +- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -320,8 +335,10 @@ index 0000000000..79af717c28
 +  #587 (float16 for LSFG frame generation), #606
 +  (NVIDIA DLSS Super Resolution for OoT), #569 (task/mesh pipelines
 +  through compute without VK_EXT_mesh_shader), #616 (OoT sharpening-network
-+  bypass), #574 (CI ccache), #659 (movie A/V sync, imports #571) and #657
-+  (keep HMMA off AMD emulated cooperative matrices, RDNA2 crash). Those are
++  bypass), #574 (CI ccache), #659 (movie A/V sync, imports #571), #657
++  (keep HMMA off AMD emulated cooperative matrices, RDNA2 crash), #664
++  (GPU Clocks Boost/Overclock for Switch 2, Mario Kart World 30 fps lock)
++  and #679 (AMD fixes from the CheezerWheezer fork survey). Those are
 +  not re-applied here.
 +- PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
 +  and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
@@ -453,7 +470,7 @@ index 0000000000..79af717c28
 +`superbuild`.
 +
 +```bash
-+git checkout 72e9429d
++git checkout bf4c42e2
 +git apply patches/superbuild.patch
 +```
 diff --git a/dist/nx2_switches.txt b/dist/nx2_switches.txt
@@ -877,7 +894,7 @@ index bf5aaabbba..bd4e4df351 100644
          size != 0 && gpu_memory != nullptr && gpu_memory->UsesNativeTiling() &&
          (Nx2Perf::Verify() || !native_indirect_uniforms_this_frame.contains(device_addr)) &&
 diff --git a/src/video_core/gpu.cpp b/src/video_core/gpu.cpp
-index f32fab777d..f537cb72cd 100644
+index a0c165b7aa..05997dd956 100644
 --- a/src/video_core/gpu.cpp
 +++ b/src/video_core/gpu.cpp
 @@ -20,6 +20,7 @@

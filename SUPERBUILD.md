@@ -25,7 +25,7 @@ a stock build as fallback.
 
 - Upstream: `zortos293/Lichii`
 - Branch: `nx2`
-- Base commit: `72e9429dafa79bea9b1b3f21c33695ab9f34c118` (2026-11-07).
+- Base commit: `bf4c42e223d4812d4456d3d8f66d892571d19a13` (2026-11-08).
   The grass/foliage fix is now upstream as #551, so the 14-commit
   `capy/oot-hyrule-grass-fix` series is no longer carried.
 - Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -47,8 +47,10 @@ a stock build as fallback.
   #587 (float16 for LSFG frame generation), #606
   (NVIDIA DLSS Super Resolution for OoT), #569 (task/mesh pipelines
   through compute without VK_EXT_mesh_shader), #616 (OoT sharpening-network
-  bypass), #574 (CI ccache), #659 (movie A/V sync, imports #571) and #657
-  (keep HMMA off AMD emulated cooperative matrices, RDNA2 crash). Those are
+  bypass), #574 (CI ccache), #659 (movie A/V sync, imports #571), #657
+  (keep HMMA off AMD emulated cooperative matrices, RDNA2 crash), #664
+  (GPU Clocks Boost/Overclock for Switch 2, Mario Kart World 30 fps lock)
+  and #679 (AMD fixes from the CheezerWheezer fork survey). Those are
   not re-applied here.
 - PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
   and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
@@ -180,6 +182,6 @@ See `tools/superbuild/README.md` for packaging notes.
 `superbuild`.
 
 ```bash
-git checkout 72e9429d
+git checkout bf4c42e2
 git apply patches/superbuild.patch
 ```
