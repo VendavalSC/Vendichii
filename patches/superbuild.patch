@@ -26,10 +26,10 @@ index 873b99bec2..258906d26f 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..b22ac4360b 100644
+index bc40878ce6..aeb39c8419 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,148 @@
+@@ -1,11 +1,168 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -38,9 +38,30 @@ index bc40878ce6..b22ac4360b 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v20
++## v21
  
 -## [0.1.0]
++- Ocarina of Time's water no longer flickers at Zora's River and other water; a
++  storage-buffer address mistaken for a texture handle now binds no texture.
++- Upload staging buffers are kept and reused instead of being freed every 64
++  frames, removing 2-68 ms setup stalls after pauses in Hyrule Field.
++- Large video-memory cards may fill more of their budget before texture
++  collection, and the texture-cache overrides are capped at the device budget.
++- Ocarina of Time's movie network is replaced by an input copy, fixing its
++  movie path.
++- Faster GPU invalidation and query handling, fewer pipeline-cache evictions,
++  motion-sensor fixes, NUP title fixes, LayeredFS mod-root guards and many more
++  upstream fixes (zortos `nx2` `aae0b063`).
++- The full superbuild set is unchanged: OoT recommended-settings prompt,
++  GPU-split and fence fixes, fence-flagged query reports, Bananza page-mark
++  batching, mja00 work, Nolar's video/scheduler/texture-cache fixes, the
++  `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets, NVIDIA DLSS on Windows,
++  native HDR (opt-in) and the updater pointed at this repository.
++- Windows and Linux, standard and PGO.
+ 
+-- Initial release candidate
++## v20
++
 +- **Native HDR output (opt-in).** Enable HDR in Graphics settings on a compatible
 +  Vulkan system and HDR display; reference white and peak luminance are adjustable.
 +  HDR uses RGB10A2/RGBA16F framebuffers and HDR swapchain color spaces, and skips
@@ -54,8 +75,7 @@ index bc40878ce6..b22ac4360b 100644
 +  texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets,
 +  NVIDIA DLSS on Windows, and an updater pointed at this repository.
 +- Windows and Linux, standard and PGO.
- 
--- Initial release candidate
++
 +## v19
 +
 +- Mario Kart World no longer locks near 30 fps: GPU Clocks Boost and Overclock
@@ -280,7 +300,7 @@ index 0000000000..a0496b95b6
 +expose the port to a network. Dumps and captures can contain game assets; keep
 +them local and do not upload `.rdc` captures or dumps publicly.
 diff --git a/README.md b/README.md
-index 48e0ad1f2c..a2775eec3f 100644
+index 0caad38d8b..e2898f2f77 100644
 --- a/README.md
 +++ b/README.md
 @@ -12,6 +12,12 @@
@@ -298,10 +318,10 @@ index 48e0ad1f2c..a2775eec3f 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..3beac26f4f
+index 0000000000..a8ae91dae1
 --- /dev/null
 +++ b/SUPERBUILD.md
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,201 @@
 +# Lichii Superbuild (unofficial)
 +
 +## Credits
@@ -329,7 +349,7 @@ index 0000000000..3beac26f4f
 +
 +- Upstream: `zortos293/Lichii`
 +- Branch: `nx2`
-+- Base commit: `bf4c42e223d4812d4456d3d8f66d892571d19a13` (2026-11-08).
++- Base commit: `aae0b063f7d0b75a86b3e0931fae3d9d76257853` (2026-11-08).
 +  The grass/foliage fix is now upstream as #551, so the 14-commit
 +  `capy/oot-hyrule-grass-fix` series is no longer carried.
 +- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -353,8 +373,13 @@ index 0000000000..3beac26f4f
 +  through compute without VK_EXT_mesh_shader), #616 (OoT sharpening-network
 +  bypass), #574 (CI ccache), #659 (movie A/V sync, imports #571), #657
 +  (keep HMMA off AMD emulated cooperative matrices, RDNA2 crash), #664
-+  (GPU Clocks Boost/Overclock for Switch 2, Mario Kart World 30 fps lock)
-+  and #679 (AMD fixes from the CheezerWheezer fork survey). Those are
++  (GPU Clocks Boost/Overclock for Switch 2, Mario Kart World 30 fps lock),
++  #679 (AMD fixes from the CheezerWheezer fork survey) and the 26-commit
++  batch ending #721 (OoT movie network input copy), #268 (texture-cache
++  budget 5/8), #714 (switches read after load), #700 (block invalidation),
++  #698 (hybrid CPU threads), #692 (TC override cap), #591 (pipeline cache
++  version), #575 (host mip chains), #533/#611 (texture invalidation),
++  #498/#610 (TLD4.F16 gathers) and #479/#609 (DMA fence thread). Those are
 +  not re-applied here.
 +- PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
 +  and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
@@ -365,6 +390,12 @@ index 0000000000..3beac26f4f
 +- Native HDR presentation from clshortfuse is carried locally: PR #180 here
 +  (a port of Djihads80/Eglantine#605). Both upstream PRs are still open. HDR is
 +  opt-in and off by default. If either lands, rebase and drop our copy.
++- Ten commits from zortos's `capy/import-fritchii-v4` (PR #778) carry the small
++  self-contained fixes from Frizti's Fritchii v4/v4.1: OoT water flicker (a
++  storage-buffer address used as a texture handle now binds no texture), reuse
++  of idle upload staging buffers, once-per-engine reads of
++  `EDEN_NX2_SKIP_SAME` / `EDEN_NX2_PERF_VERIFY`, a live `speed_limit` debug
++  method, fence-decision profiling logs, and tests.
 +- License: GPL-3.0-or-later, inherited from Lichii/Eden/yuzu
 +
 +## Branches
@@ -489,7 +520,7 @@ index 0000000000..3beac26f4f
 +`superbuild`.
 +
 +```bash
-+git checkout bf4c42e2
++git checkout aae0b063
 +git apply patches/superbuild.patch
 +```
 diff --git a/dist/nx2_switches.txt b/dist/nx2_switches.txt
@@ -502,6 +533,22 @@ index 095ecdede4..68267cf6bd 100644
  #EDEN_NX2_KEEP_ASTC=1
 +EDEN_NX2_PRELOAD_ALL_PIPELINES=1
 +EDEN_NX2_ASYNC_DISCARD=1
+diff --git a/docs/nx2/debug-mcp.md b/docs/nx2/debug-mcp.md
+index 8a22eadb3c..0cbcf9f31d 100644
+--- a/docs/nx2/debug-mcp.md
++++ b/docs/nx2/debug-mcp.md
+@@ -211,6 +211,11 @@ the self, self-and-caller and inclusive counts per function. The report and its
+ to `samples-<session>-<n>.txt` in the dump directory. Windows only; the threads run slower while
+ sampled, so read fps from a run without it.
+ 
++**`speed_limit`** `{on?}`. Lifts (`false`) or restores (`true`) the speed limit live and returns
++the `previous` and current `on` state, so a test script can boot through the logos and menus
++unlimited. Without `on` it only reports the state. Use it through `--call`; the MCP adapter does
++not list it.
++
+ **`reject_shaders`** `{hashes?, reject?, timeout_s?}`. This is `EDEN_NX2_REJECT_HASH` at
+ runtime: the same keys (native program key or shader hash) and the same effect. Pipeline
+ invalidation turned out to be tractable:
 diff --git a/docs/user/Graphics.md b/docs/user/Graphics.md
 index 4928eb47ff..3be40fe991 100644
 --- a/docs/user/Graphics.md
@@ -674,6 +721,35 @@ index 951d99cc57..3005df9093 100644
          LOG_DEBUG(Core, "Shutdown OK");
      }
  
+diff --git a/src/core/debugger/nx2_debug_tools.cpp b/src/core/debugger/nx2_debug_tools.cpp
+index 2b68c58fb5..6fd65ba9a8 100644
+--- a/src/core/debugger/nx2_debug_tools.cpp
++++ b/src/core/debugger/nx2_debug_tools.cpp
+@@ -486,6 +486,16 @@ json SampleThreads(ToolState& state, const json& params) {
+     return {{"file", path.generic_string()}, {"report", std::move(report)}};
+ }
+ 
++// Lifts or restores the speed limit (test scripts boot through the logos and menus unlimited).
++json SpeedLimit(ToolState&, const json& params) {
++    auto& setting = Settings::values.use_speed_limit;
++    const bool previous = setting.GetValue();
++    if (params.contains("on")) {
++        setting.SetValue(params.at("on").get<bool>());
++    }
++    return {{"previous", previous}, {"on", setting.GetValue()}};
++}
++
+ json ReadMemory(ToolState& state, const json& params) {
+     const u64 address = AddressParam(params, "address");
+     const u64 size = ReadSize(params, address);
+@@ -680,6 +690,7 @@ Handlers MakeHandlers(const std::shared_ptr<ToolState>& state) {
+         {"capture_frame", handler(CaptureFrame)},
+         {"reject_shaders", handler(RejectShaders)},
+         {"sample", handler(SampleThreads)},
++        {"speed_limit", handler(SpeedLimit)},
+         {"read_memory", handler(ReadMemory)},
+         {"search_memory", handler(SearchMemory)},
+         {"read_gpu_memory", handler(ReadGpuMemory)},
 diff --git a/src/core/hle/service/nvnflinger/pixel_format.h b/src/core/hle/service/nvnflinger/pixel_format.h
 index a38c8be777..a4f8a53c72 100644
 --- a/src/core/hle/service/nvnflinger/pixel_format.h
@@ -687,7 +763,7 @@ index a38c8be777..a4f8a53c72 100644
  };
  
 diff --git a/src/core/hle/service/nx2_gsv.h b/src/core/hle/service/nx2_gsv.h
-index 9f656e8df6..e383a227fd 100644
+index f968e2f6ec..8142ef04ac 100644
 --- a/src/core/hle/service/nx2_gsv.h
 +++ b/src/core/hle/service/nx2_gsv.h
 @@ -80,6 +80,21 @@
@@ -721,7 +797,7 @@ index 9f656e8df6..e383a227fd 100644
      };
      std::mutex mutex;
      std::map<u32, Memory> memories;
-@@ -1893,6 +1910,7 @@ private:
+@@ -1894,6 +1911,7 @@ private:
      // Eden's GPU thread has processed the frame. Otherwise the game laps the GPU thread and
      // rewrites command memory it hasn't read yet.
      u32 m_wait_timeouts{};
@@ -729,7 +805,7 @@ index 9f656e8df6..e383a227fd 100644
      struct PresentStats {
          long long frame_us{}, fence_us{}, composite_us{}, pace_us{}, max_fence_us{};
          long long max_frame_us{}, hitches{};
-@@ -1954,9 +1972,13 @@ private:
+@@ -1955,9 +1973,13 @@ private:
          if (mkw_dynamic) {
              swap_interval = 1;
          }
@@ -744,7 +820,7 @@ index 9f656e8df6..e383a227fd 100644
          const u32 refresh_rate = (timing & 0xffff) >= 30 && (timing & 0xffff) <= 240 ? timing & 0xffff : 60;
          if (trace) {
              m_frame_trace.interval = swap_interval;
-@@ -2074,7 +2096,7 @@ private:
+@@ -2075,7 +2097,7 @@ private:
  
      // Shows a presented native image: word 5 is the image id, ~word 22 / word 24 the GPU fence
      // (syncpoint, value) to wait for (layout from changes.patch). The image is a block-linear
@@ -753,7 +829,7 @@ index 9f656e8df6..e383a227fd 100644
      // shown_size: the present's word 7, ((height - 1) << 16) | (width - 1) of the area the game drew
      // into from the image's top-left corner (0 when it gives none).
      void Composite(u32 image_id, u32 fence_id, u32 fence_value, u32 shown_size) {
-@@ -2083,7 +2105,9 @@ private:
+@@ -2084,7 +2106,9 @@ private:
          u64 parent_offset{};
          std::optional<Nx2NativeObjects::VideoTrace> video_trace;
          Nx2ImageLayout layout{};
@@ -764,7 +840,7 @@ index 9f656e8df6..e383a227fd 100644
          {
              std::scoped_lock lk{m_objects->mutex};
              const auto image = m_objects->images.find(image_id);
-@@ -2098,7 +2122,9 @@ private:
+@@ -2099,7 +2123,9 @@ private:
              parent = memory->second.parent;
              parent_offset = memory->second.parent_offset + image->second.offset;
              layout = Nx2CalculateImageLayout(image->second.preference.data());
@@ -775,7 +851,7 @@ index 9f656e8df6..e383a227fd 100644
              if (Nx2VideoTraceEnabled()) {
                  video_trace = m_objects->last_video_write;
              }
-@@ -2182,14 +2208,19 @@ private:
+@@ -2183,14 +2209,19 @@ private:
              .offset = 0,
              .width = layout.width,
              .height = layout.height,
@@ -799,7 +875,7 @@ index 9f656e8df6..e383a227fd 100644
          }};
          std::vector<Nvidia::NvFence> fences;
          if (fence_id < 192) {
-@@ -2296,22 +2327,29 @@ private:
+@@ -2297,22 +2328,29 @@ private:
          TipcReplyWords(ctx, {60, 0});
      }
  
@@ -841,7 +917,7 @@ index 9f656e8df6..e383a227fd 100644
      }
  
      // 212(u64 layer): u64 bits of the layer's buffer slots that are ready. The client polls it once
-@@ -3174,6 +3212,7 @@ private:
+@@ -3175,6 +3213,7 @@ private:
              }
              pictures.clear();
              decoder->Decode(input.data, input.pts, pictures);
@@ -849,7 +925,7 @@ index 9f656e8df6..e383a227fd 100644
              if (input.end) {
                  decoder->Drain(pictures);
              }
-@@ -3908,6 +3947,22 @@ private:
+@@ -3909,6 +3948,22 @@ private:
          image.memory = w[19];
          std::copy_n(w + 2, image.preference.size(), image.preference.begin());
          image.size = Nx2CalculateImageLayout(w + 2).size;
@@ -965,10 +1041,19 @@ index 2f76f716cf..395f2e9639 100644
             tr("Changes the output graphics API.\nVulkan is recommended."));
      INSERT(Settings, vulkan_device, tr("Device:"),
 diff --git a/src/tests/CMakeLists.txt b/src/tests/CMakeLists.txt
-index 58a569e189..144b0d27c2 100644
+index f10f56799d..c92ebab18f 100644
 --- a/src/tests/CMakeLists.txt
 +++ b/src/tests/CMakeLists.txt
-@@ -75,6 +75,7 @@ add_executable(tests
+@@ -66,6 +66,8 @@ add_executable(tests
+     video_core/async_draw_policy.cpp
+     video_core/async_shader_emission.cpp
+     video_core/pipeline_build.cpp
++    video_core/oot_network.cpp
++    video_core/page_filter.cpp
+     video_core/pipeline_optimization.cpp
+     video_core/spirv_atomic_retry.cpp
+     video_core/spirv_storage_alignment.cpp
+@@ -76,6 +78,7 @@ add_executable(tests
      video_core/gpu_written_pages.cpp
      video_core/command_writer.cpp
      video_core/split_fence_wait.cpp
@@ -1162,11 +1247,482 @@ index 0000000000..45c283667c
 +        pages.Check();
 +    }
 +}
+diff --git a/src/tests/video_core/oot_network.cpp b/src/tests/video_core/oot_network.cpp
+new file mode 100644
+index 0000000000..a95381302b
+--- /dev/null
++++ b/src/tests/video_core/oot_network.cpp
+@@ -0,0 +1,31 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#include <catch2/catch_test_macros.hpp>
++
++#include "common/settings.h"
++#include "video_core/oot_network.h"
++
++using namespace VideoCommon::OotNetwork;
++
++TEST_CASE("Ocarina of Time tonemap shaders are recognized", "[video_core][oot_network]") {
++    STATIC_REQUIRE(IsTonemapShader(0xbded5ce917183214ULL));
++    STATIC_REQUIRE(IsTonemapShader(0x6cb06edf14be1d79ULL));
++    STATIC_REQUIRE(IsTonemapShader(0x3ac011bd2d772994ULL));
++    STATIC_REQUIRE_FALSE(IsTonemapShader(0));
++    STATIC_REQUIRE_FALSE(IsTonemapShader(PrepassProgramKey));
++}
++
++TEST_CASE("Ocarina of Time network bypass follows the setting and the game",
++          "[video_core][oot_network]") {
++    auto& setting = Settings::values.oot_anti_aliasing;
++    const auto previous = setting.GetValue();
++
++    setting.SetValue(Settings::OotAntiAliasing::Game);
++    CHECK_FALSE(BypassEnabled(ProgramId));
++
++    setting.SetValue(Settings::OotAntiAliasing::NoSharpening);
++    CHECK(BypassEnabled(ProgramId));
++    CHECK_FALSE(BypassEnabled(0x0400C3F00006E000ULL));
++
++    setting.SetValue(previous);
++}
+diff --git a/src/tests/video_core/page_filter.cpp b/src/tests/video_core/page_filter.cpp
+new file mode 100644
+index 0000000000..9938f9fcae
+--- /dev/null
++++ b/src/tests/video_core/page_filter.cpp
+@@ -0,0 +1,57 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#include <catch2/catch_test_macros.hpp>
++
++#include "video_core/page_filter.h"
++
++using VideoCommon::PageFilter;
++
++namespace {
++constexpr u64 Page = 0x1000;
++}
++
++TEST_CASE("Page filter reports nothing before any mark", "[video_core][page_filter]") {
++    PageFilter filter;
++    CHECK_FALSE(filter.Any(0, Page));
++    CHECK_FALSE(filter.Any(0x1234'5000, 64 * Page));
++    CHECK_FALSE(filter.Any(0, 0));
++}
++
++TEST_CASE("Page filter covers every page a mark touches", "[video_core][page_filter]") {
++    PageFilter filter;
++    filter.Mark(3 * Page + 0x10, 2 * Page);
++    CHECK_FALSE(filter.Any(2 * Page, Page));
++    CHECK(filter.Any(3 * Page, 1));
++    CHECK(filter.Any(4 * Page, Page));
++    CHECK(filter.Any(5 * Page, 1));
++    CHECK_FALSE(filter.Any(6 * Page, Page));
++    CHECK(filter.Any(0, 16 * Page));
++}
++
++TEST_CASE("Page filter handles marks across 64-page words", "[video_core][page_filter]") {
++    PageFilter filter;
++    filter.Mark(60 * Page, 200 * Page);
++    CHECK_FALSE(filter.Any(59 * Page, Page));
++    CHECK(filter.Any(60 * Page, Page));
++    CHECK(filter.Any(63 * Page, 2 * Page));
++    CHECK(filter.Any(128 * Page, 64 * Page));
++    CHECK(filter.Any(259 * Page, Page));
++    CHECK_FALSE(filter.Any(260 * Page, Page));
++}
++
++TEST_CASE("Page filter ignores empty marks", "[video_core][page_filter]") {
++    PageFilter filter;
++    filter.Mark(8 * Page, 0);
++    CHECK_FALSE(filter.Any(8 * Page, Page));
++}
++
++TEST_CASE("Page filter answers conservatively outside its range", "[video_core][page_filter]") {
++    constexpr u64 Limit = u64{1} << 36;
++    PageFilter filter;
++    CHECK(filter.Any(Limit, Page));
++    CHECK_FALSE(filter.Any(0, Page));
++
++    filter.Mark(Limit, Page);
++    CHECK(filter.Any(Limit, Page));
++    CHECK_FALSE(filter.Any(0, Page));
++}
+diff --git a/src/tests/video_core/shader_invalidation.cpp b/src/tests/video_core/shader_invalidation.cpp
+index e5670daca5..478494ae7c 100644
+--- a/src/tests/video_core/shader_invalidation.cpp
++++ b/src/tests/video_core/shader_invalidation.cpp
+@@ -6,6 +6,7 @@
+ #include <memory>
+ #include <random>
+ #include <stdexcept>
++#include <string_view>
+ #include <vector>
+ #include <catch2/catch_test_macros.hpp>
+ #include "core/device_memory.h"
+@@ -39,6 +40,16 @@ struct ShaderCacheTestAccess {
+     static bool IsRejected(ShaderCache& cache, VAddr address) {
+         return cache.IsRejected(address);
+     }
++    static void Rethrow(ShaderCache& cache, VAddr address) {
++        cache.RethrowIfRejected(address);
++    }
++    static void RememberRejection(ShaderCache& cache, VAddr address) {
++        try {
++            throw std::runtime_error{"lowering failed"};
++        } catch (...) {
++            cache.RememberRejection(address);
++        }
++    }
+ };
+ } // namespace VideoCommon
+ 
+@@ -138,6 +149,51 @@ TEST_CASE("Debug server rejections drop matching native programs", "[shader_inva
+     VideoCore::Nx2Debug::EndSession();
+ }
+ 
++TEST_CASE("A remembered rejection marks its page so filtered writes still clear it",
++          "[shader_invalidation][page_filter]") {
++    Core::DeviceMemory memory;
++    Tegra::MaxwellDeviceMemoryManager device_memory{memory};
++    auto cache = ShaderCacheTestAccess::Create(device_memory);
++    constexpr VAddr rejected = 0x7'1234'5100;
++    REQUIRE_FALSE(cache->page_filter.Any(rejected, 1));
++
++    ShaderCacheTestAccess::RememberRejection(*cache, rejected);
++    REQUIRE(ShaderCacheTestAccess::IsRejected(*cache, rejected));
++    CHECK(cache->page_filter.Any(rejected, 1));
++    constexpr VAddr page = rejected & ~VAddr{0xfff};
++    CHECK(cache->page_filter.Any(page, 0x1000));
++    CHECK_FALSE(cache->page_filter.Any(page + 0x1000, 0x1000));
++    CHECK_FALSE(cache->page_filter.Any(page - 0x1000, 0x1000));
++
++    // A write elsewhere keeps the rejection.
++    const std::array unrelated{std::pair<DAddr, size_t>{rejected + 0x10000, 4}};
++    cache->InvalidateRegions(unrelated);
++    CHECK(ShaderCacheTestAccess::IsRejected(*cache, rejected));
++
++    // A write over it, admitted by the filter, lets the program be lowered again.
++    const std::array over{std::pair<DAddr, size_t>{rejected, 8}};
++    REQUIRE(cache->page_filter.Any(over[0].first, over[0].second));
++    cache->InvalidateRegions(over);
++    CHECK_FALSE(ShaderCacheTestAccess::IsRejected(*cache, rejected));
++}
++
++TEST_CASE("Remembering a rejection twice keeps the first error",
++          "[shader_invalidation][page_filter]") {
++    Core::DeviceMemory memory;
++    Tegra::MaxwellDeviceMemoryManager device_memory{memory};
++    auto cache = ShaderCacheTestAccess::Create(device_memory);
++    constexpr VAddr rejected = 0x200000;
++    ShaderCacheTestAccess::Reject(*cache, rejected);
++    ShaderCacheTestAccess::RememberRejection(*cache, rejected);
++    CHECK(ShaderCacheTestAccess::IsRejected(*cache, rejected));
++    try {
++        ShaderCacheTestAccess::Rethrow(*cache, rejected);
++        FAIL("Rejection was not rethrown");
++    } catch (const std::runtime_error& error) {
++        CHECK(std::string_view{error.what()} == "rejected");
++    }
++}
++
+ TEST_CASE("Shader invalidation CPU benchmark", "[.][cache_bench]") {
+     Core::DeviceMemory memory;
+     Tegra::MaxwellDeviceMemoryManager device_memory{memory};
+diff --git a/src/tests/video_core/spirv_software_matrix.cpp b/src/tests/video_core/spirv_software_matrix.cpp
+index 9ed56aa081..1d7905ea7a 100644
+--- a/src/tests/video_core/spirv_software_matrix.cpp
++++ b/src/tests/video_core/spirv_software_matrix.cpp
+@@ -132,6 +132,120 @@ bool HasCapability(const std::vector<u32>& code, u32 capability) {
+     });
+ }
+ 
++namespace Op {
++constexpr u32 ExtInst = 12, Constant = 43, Function = 54, FunctionParameter = 55, Load = 61,
++              Store = 62, CompositeExtract = 81, Select = 169, IEqual = 170, ULessThan = 176,
++              LoopMerge = 246, Label = 248, GroupNonUniformShuffle = 345;
++constexpr u32 RoundEven = 2, Fma = 50;
++} // namespace Op
++
++/// The instructions of a module in order, with each result's defining instruction.
++struct Module {
++    struct Inst {
++        u32 opcode;
++        std::vector<u32> words;
++    };
++    std::vector<Inst> insts;
++    std::map<u32, size_t> defs;
++
++    explicit Module(const std::vector<u32>& code) {
++        for (size_t offset = 5; offset < code.size();) {
++            const u32 size = code[offset] >> 16;
++            REQUIRE(size != 0);
++            const u32 opcode = code[offset] & 0xffffU;
++            insts.push_back({opcode, {code.begin() + offset + 1, code.begin() + offset + size}});
++            offset += size;
++        }
++        // OpTypeVoid..OpTypeFunction declare types; an instruction whose first operand is a type
++        // defines a typed result next. Debug, mode and decoration instructions (whose first
++        // operand can equal a type id) are skipped.
++        std::vector<u32> types;
++        for (const auto& inst : insts) {
++            if (inst.opcode >= 19 && inst.opcode <= 33) {
++                types.push_back(inst.words[0]);
++            }
++        }
++        for (size_t index = 0; index < insts.size(); ++index) {
++            const auto& inst = insts[index];
++            const bool annotation =
++                (inst.opcode >= 2 && inst.opcode <= 33 && inst.opcode != Op::ExtInst) ||
++                inst.opcode == 71 || inst.opcode == 72 || inst.opcode == 332 ||
++                inst.opcode == 5632;
++            if (inst.opcode == Op::Label) {
++                defs.emplace(inst.words[0], index);
++            } else if (!annotation && inst.words.size() >= 2 &&
++                       std::ranges::find(types, inst.words[0]) != types.end()) {
++                defs.emplace(inst.words[1], index);
++            }
++        }
++    }
++
++    const Inst* Def(u32 id) const {
++        const auto it = defs.find(id);
++        return it == defs.end() ? nullptr : &insts[it->second];
++    }
++
++    /// Ids an instruction reads (literal operands skipped where the opcode has them).
++    static std::vector<u32> Operands(const Inst& inst) {
++        switch (inst.opcode) {
++        case Op::Constant:
++        case Op::FunctionParameter:
++        case 59: // OpVariable
++            return {};
++        case Op::CompositeExtract:
++            return {inst.words[2]};
++        case Op::ExtInst:
++            return {inst.words.begin() + 4, inst.words.end()};
++        default:
++            return {inst.words.begin() + 2, inst.words.end()};
++        }
++    }
++
++    bool IsExtInst(const Inst& inst, u32 number) const {
++        return inst.opcode == Op::ExtInst && inst.words[3] == number;
++    }
++
++    /// Whether `id` is computed from an OpExtInst `number`, through values only (not memory).
++    bool DependsOn(u32 id, u32 number) const {
++        std::vector<u32> pending{id};
++        std::vector<u32> seen;
++        while (!pending.empty()) {
++            const u32 current = pending.back();
++            pending.pop_back();
++            if (std::ranges::find(seen, current) != seen.end()) {
++                continue;
++            }
++            seen.push_back(current);
++            const Inst* const inst = Def(current);
++            if (!inst || inst->opcode == Op::Load) {
++                continue;
++            }
++            if (IsExtInst(*inst, number)) {
++                return true;
++            }
++            for (const u32 operand : Operands(*inst)) {
++                pending.push_back(operand);
++            }
++        }
++        return false;
++    }
++
++    size_t IndexOf(const Inst& inst) const {
++        return static_cast<size_t>(&inst - insts.data());
++    }
++};
++
++/// Where a software matrix operand comes from: parameter (0 = A, 1 = B) and component.
++std::pair<u32, u32> OperandSource(const Module& module, u32 id,
++                                  const std::vector<u32>& parameters) {
++    const auto* const extract = module.Def(id);
++    REQUIRE(extract);
++    REQUIRE(extract->opcode == Op::CompositeExtract);
++    const auto parameter = std::ranges::find(parameters, extract->words[2]);
++    REQUIRE(parameter != parameters.end());
++    return {static_cast<u32>(parameter - parameters.begin()), extract->words[3]};
++}
++
+ }
+ 
+ TEST_CASE("Software HMMA shares one helper per depth without tensor extensions",
+@@ -197,6 +311,132 @@ TEST_CASE("Software HMMA rounds once per uniform K8 group", "[video_core][tensor
+     }
+ }
+ 
++TEST_CASE("Software HMMA stores each group's rounded accumulators and reads the right halves",
++          "[video_core][tensor][ampere]") {
++    for (const u32 depth : {8U, 16U}) {
++        CAPTURE(depth);
++        TensorProgram fixture{1, depth};
++        const Module module{fixture.Emit()};
++        const auto& insts = module.insts;
++
++        // The helper: the DontInline function with three parameters (A, B, C).
++        const auto function = std::ranges::find_if(insts, [](const Module::Inst& inst) {
++            return inst.opcode == Op::Function && (inst.words[2] & 0x2) != 0;
++        });
++        REQUIRE(function != insts.end());
++        std::vector<u32> parameters;
++        for (auto it = function + 1; it != insts.end() && it->opcode == Op::FunctionParameter;
++             ++it) {
++            parameters.push_back(it->words[1]);
++        }
++        REQUIRE(parameters.size() == 3);
++
++        // The group body: the loop body for K=16, the whole helper for K=8.
++        size_t body_begin = module.IndexOf(*function);
++        size_t body_end = insts.size();
++        const auto loop = std::ranges::find_if(
++            insts, [](const Module::Inst& inst) { return inst.opcode == Op::LoopMerge; });
++        u32 group = 0;
++        if (depth == 16) {
++            REQUIRE(loop != insts.end());
++            const u32 continue_label = loop->words[1];
++            body_begin = module.IndexOf(*loop);
++            body_end = module.defs.at(continue_label);
++            REQUIRE(body_begin < body_end);
++            const auto limit = std::ranges::find_if(
++                insts, [](const Module::Inst& inst) { return inst.opcode == Op::ULessThan; });
++            REQUIRE(limit != insts.end());
++            group = limit->words[2];
++            REQUIRE(module.Def(group)->opcode == Op::Load);
++        } else {
++            REQUIRE(loop == insts.end());
++        }
++        const auto in_body = [&](size_t index) { return index > body_begin && index < body_end; };
++
++        size_t last_fma = 0;
++        u32 roundings = 0, fmas = 0, shuffles = 0;
++        std::vector<std::pair<std::pair<u32, u32>, std::pair<u32, u32>>> halves;
++        for (size_t index = 0; index < insts.size(); ++index) {
++            const auto& inst = insts[index];
++            if (module.IsExtInst(inst, Op::RoundEven)) {
++                CHECK(in_body(index));
++                ++roundings;
++            } else if (module.IsExtInst(inst, Op::Fma)) {
++                CHECK(in_body(index));
++                last_fma = (std::max)(last_fma, index);
++                ++fmas;
++            } else if (inst.opcode == Op::GroupNonUniformShuffle) {
++                CHECK(in_body(index));
++                ++shuffles;
++                const u32 value = inst.words[3];
++                if (depth == 8) {
++                    // One group: always the low halves.
++                    const auto source = OperandSource(module, value, parameters);
++                    halves.push_back({source, source});
++                    continue;
++                }
++                // K=16: the group counter picks the high half in the second iteration.
++                const auto* const select = module.Def(value);
++                REQUIRE(select);
++                REQUIRE(select->opcode == Op::Select);
++                const auto* const condition = module.Def(select->words[2]);
++                REQUIRE(condition);
++                REQUIRE(condition->opcode == Op::IEqual);
++                const u32 compared = condition->words[2] == group ? condition->words[3]
++                                                                  : condition->words[2];
++                CHECK((condition->words[2] == group || condition->words[3] == group));
++                const auto* const one = module.Def(compared);
++                REQUIRE(one);
++                REQUIRE(one->opcode == Op::Constant);
++                CHECK(one->words[2] == 1);
++                halves.push_back({OperandSource(module, select->words[3], parameters),
++                                  OperandSource(module, select->words[4], parameters)});
++            }
++        }
++        CHECK(roundings == 4);
++        CHECK(fmas == 32);
++        CHECK(shuffles == 16);
++
++        // A shuffles read A[row] then A[row + 2]; B shuffles read B[0] then B[1].
++        using Source = std::pair<u32, u32>;
++        const std::vector<std::pair<Source, Source>> allowed =
++            depth == 8 ? std::vector<std::pair<Source, Source>>{{{0, 0}, {0, 0}},
++                                                                {{0, 1}, {0, 1}},
++                                                                {{1, 0}, {1, 0}}}
++                       : std::vector<std::pair<Source, Source>>{{{0, 2}, {0, 0}},
++                                                                {{0, 3}, {0, 1}},
++                                                                {{1, 1}, {1, 0}}};
++        for (const auto& pair : halves) {
++            CHECK(std::ranges::find(allowed, pair) != allowed.end());
++        }
++        for (const auto& expected : allowed) {
++            CHECK(std::ranges::count(halves, expected) == (expected.first.first == 0 ? 4 : 8));
++        }
++
++        // After the group's last FMA, every accumulator is stored rounded inside the body.
++        std::vector<u32> rounded_targets;
++        std::vector<u32> fma_targets;
++        for (size_t index = body_begin + 1; index < body_end; ++index) {
++            const auto& inst = insts[index];
++            if (inst.opcode != Op::Store) {
++                continue;
++            }
++            if (module.DependsOn(inst.words[1], Op::RoundEven)) {
++                CHECK(index > last_fma);
++                rounded_targets.push_back(inst.words[0]);
++            } else if (module.DependsOn(inst.words[1], Op::Fma)) {
++                fma_targets.push_back(inst.words[0]);
++            }
++        }
++        std::ranges::sort(rounded_targets);
++        CHECK(std::ranges::adjacent_find(rounded_targets) == rounded_targets.end());
++        CHECK(rounded_targets.size() == 4);
++        for (const u32 target : rounded_targets) {
++            CHECK(std::ranges::find(fma_targets, target) != fma_targets.end());
++        }
++    }
++}
++
+ TEST_CASE("Software matrix helpers also emit for 64-lane host subgroups",
+           "[video_core][tensor][ampere]") {
+     for (const u32 depth : {8U, 16U}) {
+diff --git a/src/tests/video_core/texture_handles.cpp b/src/tests/video_core/texture_handles.cpp
+index 58cae62e63..1757fd2060 100644
+--- a/src/tests/video_core/texture_handles.cpp
++++ b/src/tests/video_core/texture_handles.cpp
+@@ -356,3 +356,27 @@ TEST_CASE("Storage handle words are read from the host-aligned buffer base",
+         CHECK(VideoCommon::EvaluateTextureHandle(info, 0, memory, cbuf_address, 4) == 0x22U);
+     }
+ }
++
++TEST_CASE("A texture handle word that holds a storage buffer address is not a handle",
++          "[video_core][texture_handles]") {
++    Shader::Info info;
++    info.storage_buffers_descriptors.push_back({.cbuf_index = 0, .cbuf_offset = 0x520, .count = 1, .is_written = false});
++    Shader::TextureDescriptor desc{};
++    desc.cbuf_index = 0;
++    desc.cbuf_offset = 0x520;
++    desc.count = 1;
++    desc.size_shift = 3;
++    CHECK(VideoCommon::HandleIsStoragePointer(info, desc, 0));
++    desc.cbuf_offset = 0x524; // the address's upper word
++    CHECK(VideoCommon::HandleIsStoragePointer(info, desc, 0));
++    desc.cbuf_offset = 0x528;
++    CHECK_FALSE(VideoCommon::HandleIsStoragePointer(info, desc, 0));
++    desc.cbuf_offset = 0x518;
++    CHECK(VideoCommon::HandleIsStoragePointer(info, desc, 1)); // the second element
++    desc.cbuf_offset = 0x520;
++    desc.cbuf_index = 2;
++    CHECK_FALSE(VideoCommon::HandleIsStoragePointer(info, desc, 0));
++    desc.cbuf_index = 0;
++    desc.handle_program = 0; // computed for each draw: a real handle
++    CHECK_FALSE(VideoCommon::HandleIsStoragePointer(info, desc, 0));
++}
 diff --git a/src/video_core/CMakeLists.txt b/src/video_core/CMakeLists.txt
-index ed0fd673fd..fcfec89fff 100644
+index 816500db62..f4f5a07e3b 100644
 --- a/src/video_core/CMakeLists.txt
 +++ b/src/video_core/CMakeLists.txt
-@@ -540,7 +540,7 @@ endif()
+@@ -541,7 +541,7 @@ endif()
  # setting is on. Only Streamline's MIT-licensed headers are compiled in and nothing of NVIDIA's is
  # linked or copied: sl.interposer.dll and the DLSS plugins are loaded at run time from the user's PC.
  cmake_dependent_option(ENABLE_NVIDIA_DLSS "Enable NVIDIA DLSS through NVIDIA Streamline" ON
@@ -1211,6 +1767,139 @@ index bf5aaabbba..bd4e4df351 100644
      if (has_host_buffer && (*channel_state->uniform_buffer_sizes)[stage][index] == 0x10000 &&
          size != 0 && gpu_memory != nullptr && gpu_memory->UsesNativeTiling() &&
          (Nx2Perf::Verify() || !native_indirect_uniforms_this_frame.contains(device_addr)) &&
+diff --git a/src/video_core/engines/maxwell_3d.cpp b/src/video_core/engines/maxwell_3d.cpp
+index ff97710f95..68bdb4d419 100644
+--- a/src/video_core/engines/maxwell_3d.cpp
++++ b/src/video_core/engines/maxwell_3d.cpp
+@@ -479,7 +479,7 @@ void Maxwell3D::CallMethod(Core::System& system, u32 method, u32 method_argument
+         method == MAXWELL3D_REG_INDEX(shadow_ram_control)) {
+         return CallMethodSlow(system, method, method_argument, is_last_call);
+     }
+-    if (VideoCommon::Nx2Perf::Verify()) {
++    if (perf_verify) {
+         return VerifyCallMethod(system, method, method_argument, is_last_call);
+     }
+     CallMethodFast(method, method_argument, is_last_call);
+@@ -603,7 +603,7 @@ void Maxwell3D::CallConstBufferWords(Core::System& system, const u32* methods,
+     for (u32 i = 0; i < count; ++i) {
+         values[i] = replay ? shadow_state.reg_array[methods[i]] : arguments[i];
+     }
+-    if (VideoCommon::Nx2Perf::Verify()) {
++    if (perf_verify) {
+         for (u32 i = 0; i < count; ++i) {
+             CallMethod(system, methods[i], arguments[i], true);
+         }
+diff --git a/src/video_core/engines/maxwell_3d.h b/src/video_core/engines/maxwell_3d.h
+index 55d3ab69ce..c9cb7849b9 100644
+--- a/src/video_core/engines/maxwell_3d.h
++++ b/src/video_core/engines/maxwell_3d.h
+@@ -26,6 +26,7 @@
+ #include "video_core/engines/engine_upload.h"
+ #include "video_core/gpu.h"
+ #include "video_core/macro.h"
++#include "video_core/nx2_perf.h"
+ #include "video_core/textures/texture.h"
+ #include "video_core/engines/maxwell_3d.h"
+ 
+@@ -3310,12 +3311,8 @@ private:
+     void CallMacroMethod(Core::System& system, u32 method, std::span<const u32> parameters);
+ 
+     /// Whether state register writes that keep the register's value are dropped (CallMethod).
+-    static bool SkipSameValueWrites() {
+-        static const bool skip = [] {
+-            const char* value = std::getenv("EDEN_NX2_SKIP_SAME");
+-            return value == nullptr || value[0] != '0';
+-        }();
+-        return skip;
++    bool SkipSameValueWrites() const {
++        return skip_same_value_writes;
+     }
+ 
+     /// Handles writes to the macro uploading register.
+@@ -3382,6 +3379,13 @@ private:
+     // model). Read per engine, not at static initialization, which runs before the frontend
+     // loads nx2_switches.txt.
+     const bool trace_first_method_writes = std::getenv("EDEN_NX2_3D_METHODS") != nullptr;
++    // EDEN_NX2_SKIP_SAME and EDEN_NX2_PERF_VERIFY, read per engine like the switch above. Every
++    // method checks them, so they are members rather than statics with a guard on the hot path.
++    const bool skip_same_value_writes = [] {
++        const char* value = std::getenv("EDEN_NX2_SKIP_SAME");
++        return value == nullptr || value[0] != '0';
++    }();
++    const bool perf_verify = VideoCommon::Nx2Perf::Verify();
+     /// Parameters that have been submitted to the macro call so far.
+     std::vector<u32> macro_params;
+ 
+diff --git a/src/video_core/fence_manager.h b/src/video_core/fence_manager.h
+index 6bb1c29d1a..3d986b3696 100644
+--- a/src/video_core/fence_manager.h
++++ b/src/video_core/fence_manager.h
+@@ -7,6 +7,9 @@
+ #pragma once
+ 
+ #include <algorithm>
++#include <array>
++#include <atomic>
++#include <chrono>
+ #include <condition_variable>
+ #include <cstdlib>
+ #include <cstring>
+@@ -86,6 +89,9 @@ public:
+             TryReleasePendingFences<false>();
+         }
+         auto [should_flush, committed_flushes] = CommitCacheFlushes();
++        if (Nx2Profile::Enabled()) {
++            NoteFenceDecision(delay_fence, committed_flushes);
++        }
+         if (!delay_fence && committed_flushes == 0 && SkipEmptyFence()) {
+             Nx2Profile::Scope skipped_scope{Nx2Profile::Zone::FenceSkipped};
+             func();
+@@ -372,6 +378,45 @@ private:
+     /// titles have no queries or queued operations either. Making, queueing and retiring them
+     /// cost the GPU thread ~5% and woke the fencing thread for each. One in 64 is still made, so
+     /// the operations fences carry along (query slot cleanup) keep running.
++    // With the GPU profile on: why fences are made rather than skipped, logged every 5 s.
++    // Called before SkipEmptyFence, which it mirrors without changing its state.
++    void NoteFenceDecision(bool delay_fence, size_t committed_flushes) {
++        static std::array<u64, 6> counts{};
++        static auto since = std::chrono::steady_clock::now();
++        size_t reason = 5; // would be skipped
++        if (delay_fence) {
++            reason = 0;
++        } else if (committed_flushes != 0) {
++            reason = 1;
++        } else if constexpr (requires { query_cache.HasPendingFenceWork(); }) {
++            if (skipped_fences >= 64) {
++                reason = 2;
++            } else if (query_cache.HasPendingFenceWork()) {
++                reason = 3;
++            } else {
++                std::scoped_lock lock{uncommitted_guard};
++                reason = uncommitted_operations.empty() ? 5 : 4;
++            }
++        } else {
++            reason = 2;
++        }
++        ++counts[reason];
++        const auto now = std::chrono::steady_clock::now();
++        const double window = std::chrono::duration<double>(now - since).count();
++        if (window < 5.0) {
++            return;
++        }
++        LOG_INFO(HW_GPU,
++                 "Fence decisions/s: {:.0f} made (delayed fences {:.0f}, committed flushes {:.0f}, "
++                 "64-skip cap {:.0f}, query cache fence work {:.0f}, uncommitted operations "
++                 "{:.0f}), {:.0f} skipped",
++                 (counts[0] + counts[1] + counts[2] + counts[3] + counts[4]) / window,
++                 counts[0] / window, counts[1] / window, counts[2] / window, counts[3] / window,
++                 counts[4] / window, counts[5] / window);
++        counts = {};
++        since = now;
++    }
++
+     bool SkipEmptyFence() {
+         if constexpr (requires { query_cache.HasPendingFenceWork(); }) {
+             if (skipped_fences >= 64 || query_cache.HasPendingFenceWork()) {
 diff --git a/src/video_core/framebuffer_config.h b/src/video_core/framebuffer_config.h
 index bb041cf12f..1befb2ba29 100644
 --- a/src/video_core/framebuffer_config.h
@@ -1483,6 +2172,18 @@ index e85e6142e7..c1a69bf197 100644
      }
  }
  
+diff --git a/src/video_core/page_filter.h b/src/video_core/page_filter.h
+index 086f3995b0..959eb1c3db 100644
+--- a/src/video_core/page_filter.h
++++ b/src/video_core/page_filter.h
+@@ -19,6 +19,7 @@ class PageFilter {
+ public:
+     PageFilter() : words{std::make_unique<std::atomic<u64>[]>(NumWords)} {}
+ 
++    /// Records that the cache holds objects on [address, address + size).
+     void Mark(u64 address, u64 size) {
+         if (size == 0) {
+             return;
 diff --git a/src/video_core/query_cache/query_cache.h b/src/video_core/query_cache/query_cache.h
 index efa148bf06..a71592b719 100644
 --- a/src/video_core/query_cache/query_cache.h
@@ -1655,10 +2356,10 @@ index efa148bf06..a71592b719 100644
          result |= streamer->HasUnsyncedQueries() || streamer->HasPendingSync();
          return result;
 diff --git a/src/video_core/query_cache/query_cache_base.h b/src/video_core/query_cache/query_cache_base.h
-index 087714748a..af7387d28d 100644
+index a8b6b701b9..e54d25f42c 100644
 --- a/src/video_core/query_cache/query_cache_base.h
 +++ b/src/video_core/query_cache/query_cache_base.h
-@@ -187,6 +187,11 @@ protected:
+@@ -189,6 +189,11 @@ protected:
      void UnregisterPending();
  
      ::Common::unordered_map<u64, ::Common::unordered_map<u32, QueryLocation>> cached_queries;
@@ -2009,6 +2710,36 @@ index 659d0fb5ff..e234b9049f 100644
  
      void PrepareFrame(const Device& device, Frame* frame, const Layout::FramebufferLayout& layout);
  
+diff --git a/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp b/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
+index a57ffb4390..32ed7ce1ae 100644
+--- a/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
++++ b/src/video_core/renderer_vulkan/vk_compute_pipeline.cpp
+@@ -447,7 +447,9 @@ bool ComputePipeline::Configure(Tegra::Engines::KeplerCompute& kepler_compute,
+     }
+     for (const auto& desc : info.texture_descriptors) {
+         for (u32 index = 0; index < desc.count; ++index) {
+-            const auto handle{read_handle(desc, index)};
++            const auto handle{VideoCommon::HandleIsStoragePointer(info, desc, index)
++                                  ? VideoCommon::NULL_TEXTURE_HANDLE
++                                  : read_handle(desc, index)};
+             views.push_back({handle.first});
+ 
+             VideoCommon::SamplerId sampler = texture_cache.GetSamplerId(handle.second, true);
+diff --git a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
+index 0cb6e61328..0832f20980 100644
+--- a/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
++++ b/src/video_core/renderer_vulkan/vk_graphics_pipeline.cpp
+@@ -575,7 +575,9 @@ bool GraphicsPipeline::ConfigureImpl(bool is_indexed) {
+         }
+         for (const auto& desc : info.texture_descriptors) {
+             for (u32 index = 0; index < desc.count; ++index) {
+-                const auto handle{read_handle(desc, index)};
++                const auto handle{VideoCommon::HandleIsStoragePointer(info, desc, index)
++                                      ? VideoCommon::NULL_TEXTURE_HANDLE
++                                      : read_handle(desc, index)};
+                 views.push_back({handle.first});
+ 
+                 VideoCommon::SamplerId sampler{texture_cache.GetSamplerId(handle.second, false)};
 diff --git a/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp b/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp
 index ecde60dea3..0a70e85fc4 100644
 --- a/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp
@@ -2470,7 +3201,7 @@ index ab2b76f10f..67d31cc3a0 100644
      bool use_present_thread;
      std::atomic<std::size_t> image_count{};
 diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-index 8fe469ac86..1aae7bc140 100644
+index 7bbdc0c0cd..1773e89034 100644
 --- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
 @@ -840,6 +840,26 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func, bool is_in
@@ -2545,7 +3276,7 @@ index 8fe469ac86..1aae7bc140 100644
          // The deferred native binding may follow DLSS's command buffer bindings.
          scheduler.InvalidateState();
      }
-@@ -2212,7 +2246,16 @@ void RasterizerVulkan::SignalReference() {
+@@ -2214,7 +2248,16 @@ void RasterizerVulkan::SignalReference() {
  }
  
  void RasterizerVulkan::ReleaseFences(bool force) {
@@ -2612,6 +3343,35 @@ index f97705184a..f988ce0685 100644
      std::jthread worker_thread;
  
      std::chrono::steady_clock::duration frame_interval{};
+diff --git a/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp b/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
+index 9a3a122c37..c7eccb3e48 100644
+--- a/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
++++ b/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
+@@ -290,6 +290,24 @@ void StagingBufferPool::ReleaseLevel(StagingBuffersCache& cache, size_t log2) {
+     auto& entries = staging.entries;
+     const size_t old_size = entries.size();
+ 
++    // Keep two idle upload buffers per level up to 32 MiB (under 128 MiB in all). Each level is
++    // swept every 64 frames, so after a pause each upload over 8 MiB (past the stream buffer's
++    // regions) got a new dedicated allocation, written to for the first time (16 MiB on an
++    // RTX 4080, idle system: 0.4 ms to create, 1.2 ms more for the first write).
++    constexpr size_t KeepMaxLog2 = 25;
++    constexpr size_t KeepPerLevel = 2;
++    if (&cache == &upload_cache && log2 <= KeepMaxLog2) {
++        size_t idle = 0;
++        std::erase_if(entries, [this, &idle](const StagingBuffer& entry) {
++            return scheduler.IsFree(entry.tick) && ++idle > KeepPerLevel;
++        });
++        staging.delete_index = 0;
++        if (staging.iterate_index > entries.size()) {
++            staging.iterate_index = 0;
++        }
++        return;
++    }
++
+     const auto is_deletable = [this](const StagingBuffer& entry) {
+         return scheduler.IsFree(entry.tick);
+     };
 diff --git a/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp b/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp
 index 79101754f7..d7afa6dae4 100644
 --- a/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp
@@ -2957,6 +3717,45 @@ index 584399567d..0a194f7f0d 100644
      bool has_imm{false};
      bool has_mailbox{false};
      bool has_fifo_relaxed{false};
+diff --git a/src/video_core/shader_handle_program.h b/src/video_core/shader_handle_program.h
+index 73ec798218..084e0ffad4 100644
+--- a/src/video_core/shader_handle_program.h
++++ b/src/video_core/shader_handle_program.h
+@@ -4,6 +4,7 @@
+ #pragma once
+ 
+ #include <algorithm>
++#include <utility>
+ 
+ #include "common/common_types.h"
+ #include "shader_recompiler/shader_info.h"
+@@ -47,4 +48,26 @@ u32 EvaluateTextureHandle(const Shader::Info& info, u32 program, Memory& gpu_mem
+         .value_or(0U);
+ }
+ 
++/// Whether texture descriptor `desc`'s handle word (element `index`) is where a storage buffer of
++/// the same program keeps its address. The translation falls back to such a word when the shader
++/// loads the handle per invocation, which no draw-time evaluation can give (a light's texture
++/// read in a clustered light loop, Ocarina of Time's waterfall). Its low bits then name an
++/// unrelated texture, a different one whenever the game moves the buffer: every frame for a
++/// double-buffered one, so the surface flickers. Bind no texture for it instead.
++template <typename Descriptor>
++[[nodiscard]] bool HandleIsStoragePointer(const Shader::Info& info, const Descriptor& desc,
++                                          u32 index) {
++    if (desc.handle_program != ~0U || desc.has_secondary) {
++        return false;
++    }
++    const u32 offset = desc.cbuf_offset + (index << desc.size_shift);
++    return std::ranges::any_of(info.storage_buffers_descriptors, [&](const auto& storage) {
++        return storage.cbuf_index == desc.cbuf_index && offset >= storage.cbuf_offset &&
++               offset - storage.cbuf_offset < sizeof(u64);
++    });
++}
++
++/// A texture handle no table holds: the texture cache binds its null view and sampler.
++inline constexpr std::pair<u32, u32> NULL_TEXTURE_HANDLE{~0U, ~0U};
++
+ } // namespace VideoCommon
 diff --git a/src/video_core/surface.cpp b/src/video_core/surface.cpp
 index da57da6917..9ce8bec55d 100644
 --- a/src/video_core/surface.cpp
@@ -2971,13 +3770,13 @@ index da57da6917..9ce8bec55d 100644
          UNIMPLEMENTED_MSG("Unimplemented format={}", format);
          return PixelFormat::A8B8G8R8_UNORM;
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 93db205836..10ee7aaa06 100644
+index 680986f5b2..869c602619 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
-@@ -281,6 +281,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
-             *target = std::strtoull(value, nullptr, 10) << 20;
+@@ -297,6 +297,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
          }
      }
+     expected_memory = (std::min)(expected_memory, critical_memory);
 +    // EDEN_NX2_TC_MINIMUM_MIB: below this the collector does not run at all. The default (half the
 +    // device memory past a margin, ~3.3 GiB on a 24 GB card) has it delete every image unused for
 +    // a few seconds, so revisited textures are created, uploaded and unswizzled again (hitches).
@@ -2987,7 +3786,7 @@ index 93db205836..10ee7aaa06 100644
      if (log) {
          LOG_INFO(HW_GPU, "Texture cache thresholds: expected {} MiB, critical {} MiB, minimum {} MiB",
                   expected_memory >> 20, critical_memory >> 20, minimum_memory >> 20);
-@@ -1429,6 +1435,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
+@@ -1445,6 +1451,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
              return PixelFormat::R5G6B5_UNORM;
          case Service::android::PixelFormat::Bgra8888:
              return PixelFormat::B8G8R8A8_UNORM;

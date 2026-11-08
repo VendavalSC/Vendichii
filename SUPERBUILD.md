@@ -25,7 +25,7 @@ a stock build as fallback.
 
 - Upstream: `zortos293/Lichii`
 - Branch: `nx2`
-- Base commit: `bf4c42e223d4812d4456d3d8f66d892571d19a13` (2026-11-08).
+- Base commit: `aae0b063f7d0b75a86b3e0931fae3d9d76257853` (2026-11-08).
   The grass/foliage fix is now upstream as #551, so the 14-commit
   `capy/oot-hyrule-grass-fix` series is no longer carried.
 - Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -49,8 +49,13 @@ a stock build as fallback.
   through compute without VK_EXT_mesh_shader), #616 (OoT sharpening-network
   bypass), #574 (CI ccache), #659 (movie A/V sync, imports #571), #657
   (keep HMMA off AMD emulated cooperative matrices, RDNA2 crash), #664
-  (GPU Clocks Boost/Overclock for Switch 2, Mario Kart World 30 fps lock)
-  and #679 (AMD fixes from the CheezerWheezer fork survey). Those are
+  (GPU Clocks Boost/Overclock for Switch 2, Mario Kart World 30 fps lock),
+  #679 (AMD fixes from the CheezerWheezer fork survey) and the 26-commit
+  batch ending #721 (OoT movie network input copy), #268 (texture-cache
+  budget 5/8), #714 (switches read after load), #700 (block invalidation),
+  #698 (hybrid CPU threads), #692 (TC override cap), #591 (pipeline cache
+  version), #575 (host mip chains), #533/#611 (texture invalidation),
+  #498/#610 (TLD4.F16 gathers) and #479/#609 (DMA fence thread). Those are
   not re-applied here.
 - PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
   and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
@@ -61,6 +66,12 @@ a stock build as fallback.
 - Native HDR presentation from clshortfuse is carried locally: PR #180 here
   (a port of Djihads80/Eglantine#605). Both upstream PRs are still open. HDR is
   opt-in and off by default. If either lands, rebase and drop our copy.
+- Ten commits from zortos's `capy/import-fritchii-v4` (PR #778) carry the small
+  self-contained fixes from Frizti's Fritchii v4/v4.1: OoT water flicker (a
+  storage-buffer address used as a texture handle now binds no texture), reuse
+  of idle upload staging buffers, once-per-engine reads of
+  `EDEN_NX2_SKIP_SAME` / `EDEN_NX2_PERF_VERIFY`, a live `speed_limit` debug
+  method, fence-decision profiling logs, and tests.
 - License: GPL-3.0-or-later, inherited from Lichii/Eden/yuzu
 
 ## Branches
@@ -185,6 +196,6 @@ See `tools/superbuild/README.md` for packaging notes.
 `superbuild`.
 
 ```bash
-git checkout bf4c42e2
+git checkout aae0b063
 git apply patches/superbuild.patch
 ```

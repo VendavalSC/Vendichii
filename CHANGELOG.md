@@ -2,6 +2,26 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v21
+
+- Ocarina of Time's water no longer flickers at Zora's River and other water; a
+  storage-buffer address mistaken for a texture handle now binds no texture.
+- Upload staging buffers are kept and reused instead of being freed every 64
+  frames, removing 2-68 ms setup stalls after pauses in Hyrule Field.
+- Large video-memory cards may fill more of their budget before texture
+  collection, and the texture-cache overrides are capped at the device budget.
+- Ocarina of Time's movie network is replaced by an input copy, fixing its
+  movie path.
+- Faster GPU invalidation and query handling, fewer pipeline-cache evictions,
+  motion-sensor fixes, NUP title fixes, LayeredFS mod-root guards and many more
+  upstream fixes (zortos `nx2` `aae0b063`).
+- The full superbuild set is unchanged: OoT recommended-settings prompt,
+  GPU-split and fence fixes, fence-flagged query reports, Bananza page-mark
+  batching, mja00 work, Nolar's video/scheduler/texture-cache fixes, the
+  `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets, NVIDIA DLSS on Windows,
+  native HDR (opt-in) and the updater pointed at this repository.
+- Windows and Linux, standard and PGO.
+
 ## v20
 
 - **Native HDR output (opt-in).** Enable HDR in Graphics settings on a compatible
