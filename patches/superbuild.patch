@@ -37,10 +37,10 @@ index d7750e2e5d..23d8bc5c88 100644
              -DCMAKE_C_COMPILER_LAUNCHER=sccache \
              -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
 diff --git a/.gitignore b/.gitignore
-index 873b99bec2..258906d26f 100644
+index 873b99bec2..67960c7f41 100644
 --- a/.gitignore
 +++ b/.gitignore
-@@ -67,3 +67,11 @@ vulkansdk*.exe
+@@ -67,3 +67,12 @@ vulkansdk*.exe
  
  # Build-time generated external sources
  externals/generated
@@ -49,6 +49,7 @@ index 873b99bec2..258906d26f 100644
 +build-*.log
 +*.rdc
 +*.dmp
++Lossless.dll
 +nx2_switches.local.txt
 +dist-local/
 +tools/superbuild/local/
