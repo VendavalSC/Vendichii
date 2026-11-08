@@ -25,7 +25,7 @@ a stock build as fallback.
 
 - Upstream: `zortos293/Lichii`
 - Branch: `nx2`
-- Base commit: `aae0b063f7d0b75a86b3e0931fae3d9d76257853` (2026-11-08).
+- Base commit: `794602bfbd012ac59dc1c8a1c9ceb8e5ddc99a3b` (2026-11-08).
   The grass/foliage fix is now upstream as #551, so the 14-commit
   `capy/oot-hyrule-grass-fix` series is no longer carried.
 - Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -55,8 +55,9 @@ a stock build as fallback.
   budget 5/8), #714 (switches read after load), #700 (block invalidation),
   #698 (hybrid CPU threads), #692 (TC override cap), #591 (pipeline cache
   version), #575 (host mip chains), #533/#611 (texture invalidation),
-  #498/#610 (TLD4.F16 gathers) and #479/#609 (DMA fence thread). Those are
-  not re-applied here.
+  #498/#610 (TLD4.F16 gathers), #479/#609 (DMA fence thread) and #778
+  (Fritchii v4/v4.1: OoT water flicker, staging-buffer reuse, per-method
+  switch reads). Those are not re-applied here.
 - PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
   and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
   locally. PR #635 is still open upstream; PR #644 (the R16F follow-up) was
@@ -66,12 +67,6 @@ a stock build as fallback.
 - Native HDR presentation from clshortfuse is carried locally: PR #180 here
   (a port of Djihads80/Eglantine#605). Both upstream PRs are still open. HDR is
   opt-in and off by default. If either lands, rebase and drop our copy.
-- Ten commits from zortos's `capy/import-fritchii-v4` (PR #778) carry the small
-  self-contained fixes from Frizti's Fritchii v4/v4.1: OoT water flicker (a
-  storage-buffer address used as a texture handle now binds no texture), reuse
-  of idle upload staging buffers, once-per-engine reads of
-  `EDEN_NX2_SKIP_SAME` / `EDEN_NX2_PERF_VERIFY`, a live `speed_limit` debug
-  method, fence-decision profiling logs, and tests.
 - License: GPL-3.0-or-later, inherited from Lichii/Eden/yuzu
 
 ## Branches
@@ -196,6 +191,6 @@ See `tools/superbuild/README.md` for packaging notes.
 `superbuild`.
 
 ```bash
-git checkout aae0b063
+git checkout 794602bf
 git apply patches/superbuild.patch
 ```

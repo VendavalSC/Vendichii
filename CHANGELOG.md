@@ -14,7 +14,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   movie path.
 - Faster GPU invalidation and query handling, fewer pipeline-cache evictions,
   motion-sensor fixes, NUP title fixes, LayeredFS mod-root guards and many more
-  upstream fixes (zortos `nx2` `aae0b063`).
+  upstream fixes (zortos `nx2` `794602bf`, including #778).
 - The full superbuild set is unchanged: OoT recommended-settings prompt,
   GPU-split and fence fixes, fence-flagged query reports, Bananza page-mark
   batching, mja00 work, Nolar's video/scheduler/texture-cache fixes, the
