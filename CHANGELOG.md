@@ -2,6 +2,16 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v23
+
+- Smoother GPU thread scheduling: the pending-channel poll timer resets when a
+  channel makes progress, with shorter Windows waits (#621).
+- Pipeline caches keep only undamaged, non-stale and non-duplicate records,
+  avoiding slow loads and corrupt cache entries (#815).
+- All v22 features included: OoT Zen 3 preset and build target, shader
+  precache, split GPU thread pinning, OoT FPS Unlock, native HDR, NVIDIA DLSS,
+  the Fritchii fixes and the full superbuild set.
+- Windows and Linux, standard and PGO.
 ## v22
 
 - Ocarina of Time's recommended preset now also disables memory-operation
