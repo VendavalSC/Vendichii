@@ -18,7 +18,7 @@ get_timestamp(BUILD_DATE)
 # dist/vendichii_version.txt holds the number.
 set(FORK_VERSION_FILE "${CMAKE_SOURCE_DIR}/dist/vendichii_version.txt")
 if (EXISTS "${FORK_VERSION_FILE}")
-    file(STRINGS "${FORK_VERSION_FILE}" FORK_VERSION LIMIT_COUNT 1 REGEX "^[0-9]+$")
+    file(STRINGS "${FORK_VERSION_FILE}" FORK_VERSION LIMIT_COUNT 1 REGEX "^[0-9]+([.][0-9]+)?$")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FORK_VERSION_FILE}")
     # The log names the commit: reconfigure when HEAD moves (commit, checkout, merge, revert).
     if (EXISTS "${CMAKE_SOURCE_DIR}/.git/logs/HEAD")
