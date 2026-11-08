@@ -8,6 +8,7 @@
 #undef VMA_IMPLEMENTATION
 #endif
 
+#include <chrono>
 #include <QSysInfo>
 #include <boost/algorithm/string/split.hpp>
 #include "common/fs/path_util.h"
@@ -4936,12 +4937,22 @@ void MainWindow::UpdateStatusBar() {
     if (!m_fpsSuffix.isEmpty())
         fpsText = fpsText % QStringLiteral(" (%1)").arg(m_fpsSuffix);
 
-    game_fps_label->setText(fpsText);
-
     emu_frametime_label->setText(tr("Frame: %1 ms").arg(results.frametime * 1000.0, 0, 'f', 2));
 
     const auto frame_gen = QtCommon::system->GPU().Renderer().GetFrameGenStatus();
     frame_gen_generating = frame_gen.generated_frames > frame_gen_frames;
+    // With frame generation, also the frames that reach the display (game + generated).
+    static auto last_status = std::chrono::steady_clock::now();
+    const auto now = std::chrono::steady_clock::now();
+    const f64 seconds = std::chrono::duration<f64>(now - last_status).count();
+    last_status = now;
+    if (frame_gen_generating && seconds > 0.0) {
+        const f64 generated_fps =
+            static_cast<f64>(frame_gen.generated_frames - frame_gen_frames) / seconds;
+        fpsText = fpsText % tr(" | Display: %1 FPS")
+                                .arg(std::round(results.average_game_fps + generated_fps), 0, 'f', 0);
+    }
+    game_fps_label->setText(fpsText);
     frame_gen_frames = frame_gen.generated_frames;
     frame_gen_state = frame_gen.state;
     UpdateFrameGenButton();
