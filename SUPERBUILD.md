@@ -58,6 +58,9 @@ a stock build as fallback.
   closed as an untested draft. If zortos lands either, rebase and drop our copy.
 - The cutscene A/V sync package carried in v17 is now upstream as #659 and was
   dropped from this branch.
+- Native HDR presentation from clshortfuse is carried locally: PR #180 here
+  (a port of Djihads80/Eglantine#605). Both upstream PRs are still open. HDR is
+  opt-in and off by default. If either lands, rebase and drop our copy.
 - License: GPL-3.0-or-later, inherited from Lichii/Eden/yuzu
 
 ## Branches

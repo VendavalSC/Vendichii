@@ -2,6 +2,22 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v20
+
+- **Native HDR output (opt-in).** Enable HDR in Graphics settings on a compatible
+  Vulkan system and HDR display; reference white and peak luminance are adjustable.
+  HDR uses RGB10A2/RGBA16F framebuffers and HDR swapchain color spaces, and skips
+  SDR-only effects and frame generation while active. From the shortfuse HDR PR
+  (upstream Eglantine #605, ported to Lichii as #180).
+- HDR is off by default and requires an HDR-capable display; unsupported HDR
+  presentation fails rather than silently falling back to SDR.
+- The rest of the superbuild set is unchanged: OoT recommended-settings prompt,
+  GPU-split and fence fixes, fence-flagged query reports, Bananza page-mark
+  batching, mja00 uniform-bank/HMMA work, Nolar's video, scheduler and
+  texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets,
+  NVIDIA DLSS on Windows, and an updater pointed at this repository.
+- Windows and Linux, standard and PGO.
+
 ## v19
 
 - Mario Kart World no longer locks near 30 fps: GPU Clocks Boost and Overclock

@@ -26,10 +26,10 @@ index 873b99bec2..258906d26f 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..55549af435 100644
+index bc40878ce6..b22ac4360b 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,132 @@
+@@ -1,11 +1,148 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -38,9 +38,26 @@ index bc40878ce6..55549af435 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v19
++## v20
  
 -## [0.1.0]
++- **Native HDR output (opt-in).** Enable HDR in Graphics settings on a compatible
++  Vulkan system and HDR display; reference white and peak luminance are adjustable.
++  HDR uses RGB10A2/RGBA16F framebuffers and HDR swapchain color spaces, and skips
++  SDR-only effects and frame generation while active. From the shortfuse HDR PR
++  (upstream Eglantine #605, ported to Lichii as #180).
++- HDR is off by default and requires an HDR-capable display; unsupported HDR
++  presentation fails rather than silently falling back to SDR.
++- The rest of the superbuild set is unchanged: OoT recommended-settings prompt,
++  GPU-split and fence fixes, fence-flagged query reports, Bananza page-mark
++  batching, mja00 uniform-bank/HMMA work, Nolar's video, scheduler and
++  texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets,
++  NVIDIA DLSS on Windows, and an updater pointed at this repository.
++- Windows and Linux, standard and PGO.
+ 
+-- Initial release candidate
++## v19
++
 +- Mario Kart World no longer locks near 30 fps: GPU Clocks Boost and Overclock
 +  once again shrink Switch 2 GPU durations (upstream #664).
 +- A batch of AMD graphics fixes: occlusion query waits, non-Depth-ref compare
@@ -53,8 +70,7 @@ index bc40878ce6..55549af435 100644
 +  scheduler and texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and
 +  `ASYNC_DISCARD` presets, and an updater pointed at this repository.
 +- Windows and Linux, standard and PGO.
- 
--- Initial release candidate
++
 +## v18
 +
 +- Movie video now stays in sync with its audio, with late-frame dropping, movie
@@ -282,10 +298,10 @@ index 48e0ad1f2c..a2775eec3f 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..4d1eb0a12c
+index 0000000000..3beac26f4f
 --- /dev/null
 +++ b/SUPERBUILD.md
-@@ -0,0 +1,187 @@
+@@ -0,0 +1,190 @@
 +# Lichii Superbuild (unofficial)
 +
 +## Credits
@@ -346,6 +362,9 @@ index 0000000000..4d1eb0a12c
 +  closed as an untested draft. If zortos lands either, rebase and drop our copy.
 +- The cutscene A/V sync package carried in v17 is now upstream as #659 and was
 +  dropped from this branch.
++- Native HDR presentation from clshortfuse is carried locally: PR #180 here
++  (a port of Djihads80/Eglantine#605). Both upstream PRs are still open. HDR is
++  opt-in and off by default. If either lands, rebase and drop our copy.
 +- License: GPL-3.0-or-later, inherited from Lichii/Eden/yuzu
 +
 +## Branches
@@ -483,6 +502,40 @@ index 095ecdede4..68267cf6bd 100644
  #EDEN_NX2_KEEP_ASTC=1
 +EDEN_NX2_PRELOAD_ALL_PIPELINES=1
 +EDEN_NX2_ASYNC_DISCARD=1
+diff --git a/docs/user/Graphics.md b/docs/user/Graphics.md
+index 4928eb47ff..3be40fe991 100644
+--- a/docs/user/Graphics.md
++++ b/docs/user/Graphics.md
+@@ -4,6 +4,29 @@ Graphical enhancements and visual quality improvments. This doesn't cover textur
+ 
+ ## Visual Enhancements
+ 
++### Native HDR output
++
++**HDR is disabled by default and requires explicit opt-in.** Enabling it assumes that
++you have configured a compatible HDR environment: Vulkan, a suitable GPU and driver,
++an HDR-capable display, and HDR enabled in the operating system where required.
++Verifying and maintaining that environment is the user's responsibility. Configure
++it before starting the game.
++
++This feature preserves native HDR output from Switch 2 games that support it. It
++does not add HDR to SDR-only games. Enabling HDR declares that your environment
++supports both HDR10 and scRGB. There are no HDR startup probes: the emulator starts
++with an SDR swapchain and selects HDR output when the game supplies native HDR
++frames.
++
++The emulator selects the requested presentation format when creating the actual
++swapchain; this is not automatic setup or a compatibility workaround. It does
++not enable operating-system HDR, tone-map HDR into SDR, or reinterpret HDR pixels
++as SDR. HDR swapchain creation failures follow the normal Vulkan error path, with
++no HDR-specific fallback. Live display changes and operating-system HDR toggles during gameplay are
++intentionally unsupported. Captures are not promised HDR-to-SDR tone mapping.
++Handling HDR content on an SDR desktop is an operating-system concern, not behavior
++this feature attempts to emulate.
++
+ ### Anti-aliasing
+ 
+ Enhancements aimed at removing jagged lines/sharp edges and/or masking artifacts.
 diff --git a/src/common/game_presets.h b/src/common/game_presets.h
 index 83dd4d3c3f..1379e76568 100644
 --- a/src/common/game_presets.h
@@ -574,6 +627,22 @@ index 140225da07..cc24eacf2f 100644
          }
      }
      return {};
+diff --git a/src/common/settings.h b/src/common/settings.h
+index d672eab8cd..a9d6a78b6b 100644
+--- a/src/common/settings.h
++++ b/src/common/settings.h
+@@ -339,6 +339,11 @@ struct Values {
+                                                                 linkage, true, "cpuopt_unsafe_ignore_global_monitor", Category::CpuUnsafe};
+ 
+     // Renderer
++    SwitchableSetting<bool> hdr{linkage, false, "hdr", Category::Renderer};
++    SwitchableSetting<u16, true> hdr_reference_white{linkage, 200, 0, 1000, "hdr_reference_white",
++                                                  Category::Renderer, Specialization::Scalar};
++    SwitchableSetting<u16, true> hdr_peak_luminance{linkage, 300, 80, 10000, "hdr_peak_luminance",
++                                                 Category::Renderer, Specialization::Scalar};
+     SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
+ #if defined(__sun__) || defined(__managarm__)
+         RendererBackend::OpenGL_GLSL,
 diff --git a/src/core/core.cpp b/src/core/core.cpp
 index 951d99cc57..3005df9093 100644
 --- a/src/core/core.cpp
@@ -605,8 +674,20 @@ index 951d99cc57..3005df9093 100644
          LOG_DEBUG(Core, "Shutdown OK");
      }
  
+diff --git a/src/core/hle/service/nvnflinger/pixel_format.h b/src/core/hle/service/nvnflinger/pixel_format.h
+index a38c8be777..a4f8a53c72 100644
+--- a/src/core/hle/service/nvnflinger/pixel_format.h
++++ b/src/core/hle/service/nvnflinger/pixel_format.h
+@@ -19,6 +19,7 @@ enum class PixelFormat : u32 {
+     Bgra8888 = 5,
+     Rgba5551 = 6,
+     Rgba4444 = 7,
++    RgbaFp16 = 22,
+     Rgba1010102 = 43,
+ };
+ 
 diff --git a/src/core/hle/service/nx2_gsv.h b/src/core/hle/service/nx2_gsv.h
-index 9f656e8df6..1d13f7d0cf 100644
+index 9f656e8df6..e383a227fd 100644
 --- a/src/core/hle/service/nx2_gsv.h
 +++ b/src/core/hle/service/nx2_gsv.h
 @@ -80,6 +80,21 @@
@@ -631,7 +712,16 @@ index 9f656e8df6..1d13f7d0cf 100644
  // Creates a session served by `iface` and returns its client end. Unlike PushIpcInterface this
  // works from a domain too, for callers that want a raw session handle.
  template <class T>
-@@ -1893,6 +1908,7 @@ private:
+@@ -1523,6 +1538,8 @@ struct Nx2NativeObjects {
+         bool gpu_read{};
+         u32 gpu_maps{};     // outstanding 426 maps
+         bool mapped_here{}; // 426 added its GPU mapping (no other mapping covered it)
++        Tegra::ColorSpace color_space{Tegra::ColorSpace::RGB709};
++        u16 linear_unit_luminance{};
+     };
+     std::mutex mutex;
+     std::map<u32, Memory> memories;
+@@ -1893,6 +1910,7 @@ private:
      // Eden's GPU thread has processed the frame. Otherwise the game laps the GPU thread and
      // rewrites command memory it hasn't read yet.
      u32 m_wait_timeouts{};
@@ -639,7 +729,7 @@ index 9f656e8df6..1d13f7d0cf 100644
      struct PresentStats {
          long long frame_us{}, fence_us{}, composite_us{}, pace_us{}, max_fence_us{};
          long long max_frame_us{}, hitches{};
-@@ -1954,9 +1970,13 @@ private:
+@@ -1954,9 +1972,13 @@ private:
          if (mkw_dynamic) {
              swap_interval = 1;
          }
@@ -654,7 +744,104 @@ index 9f656e8df6..1d13f7d0cf 100644
          const u32 refresh_rate = (timing & 0xffff) >= 30 && (timing & 0xffff) <= 240 ? timing & 0xffff : 60;
          if (trace) {
              m_frame_trace.interval = swap_interval;
-@@ -3174,6 +3194,7 @@ private:
+@@ -2074,7 +2096,7 @@ private:
+ 
+     // Shows a presented native image: word 5 is the image id, ~word 22 / word 24 the GPU fence
+     // (syncpoint, value) to wait for (layout from changes.patch). The image is a block-linear
+-    // RGBA8 surface in the console's native GOB layout at GPU address == CPU address.
++    // surface in the console's native GOB layout at GPU address == CPU address.
+     // shown_size: the present's word 7, ((height - 1) << 16) | (width - 1) of the area the game drew
+     // into from the image's top-left corner (0 when it gives none).
+     void Composite(u32 image_id, u32 fence_id, u32 fence_value, u32 shown_size) {
+@@ -2083,7 +2105,9 @@ private:
+         u64 parent_offset{};
+         std::optional<Nx2NativeObjects::VideoTrace> video_trace;
+         Nx2ImageLayout layout{};
+-        u32 image_format{};
++        Nx2NativeImageFormat image_format{};
++        Tegra::ColorSpace color_space{Tegra::ColorSpace::RGB709};
++        u16 linear_unit_luminance{};
+         {
+             std::scoped_lock lk{m_objects->mutex};
+             const auto image = m_objects->images.find(image_id);
+@@ -2098,7 +2122,9 @@ private:
+             parent = memory->second.parent;
+             parent_offset = memory->second.parent_offset + image->second.offset;
+             layout = Nx2CalculateImageLayout(image->second.preference.data());
+-            image_format = image->second.preference[6];
++            image_format = static_cast<Nx2NativeImageFormat>(image->second.preference[6]);
++            color_space = image->second.color_space;
++            linear_unit_luminance = image->second.linear_unit_luminance;
+             if (Nx2VideoTraceEnabled()) {
+                 video_trace = m_objects->last_video_write;
+             }
+@@ -2182,14 +2208,19 @@ private:
+             .offset = 0,
+             .width = layout.width,
+             .height = layout.height,
+-            .stride = static_cast<u32>(layout.pitch / 4),
+-            // Preference word 6: 1 = RGBA8, 4 = RGB10A2.
+-            .pixel_format = image_format == 4 ? android::PixelFormat::Rgba1010102
+-                                              : android::PixelFormat::Rgba8888,
++            .stride = static_cast<u32>(
++                layout.pitch / (image_format == Nx2NativeImageFormat::Rgba16Float ? 8 : 4)),
++            .pixel_format = image_format == Nx2NativeImageFormat::Rgba16Float
++                                ? android::PixelFormat::RgbaFp16
++                            : image_format == Nx2NativeImageFormat::Rgb10A2
++                                ? android::PixelFormat::Rgba1010102
++                                : android::PixelFormat::Rgba8888,
+             .transform_flags = android::BufferTransformFlags::Unset,
+             .crop_rect = {0, 0, static_cast<int>(crop_width), static_cast<int>(crop_height)},
+             .blending = Tegra::BlendMode::Opaque,
+             .native_tiling = true,
++            .color_space = color_space,
++            .linear_unit_luminance = linear_unit_luminance,
+         }};
+         std::vector<Nvidia::NvFence> fences;
+         if (fence_id < 192) {
+@@ -2296,22 +2327,29 @@ private:
+         TipcReplyWords(ctx, {60, 0});
+     }
+ 
+-    // nn::vi2::QueryDisplayHdrPaperWhite(display name): u16 paper white in nits. The empty reply
+-    // left it to the message buffer's leftovers; answer the BT.2408 reference white.
++    // nn::vi2::QueryDisplayHdrPaperWhite(display name): u16 reference white in nits.
++    // Explicit values are capped at peak; zero selects the Switch 2 calibration default.
+     void QueryDisplayHdrPaperWhite(HLERequestContext& ctx) {
+-        TipcReplyWords(ctx, {203});
++        if (Settings::values.hdr_reference_white.GetValue() > 0) {
++            TipcReplyWords(ctx, {std::min(Settings::values.hdr_reference_white.GetValue(),
++                                        Settings::values.hdr_peak_luminance.GetValue())});
++        } else {
++            // Switch 2 calibration starts at ceil(peak / 1.5), clamped to 50..300 nits.
++            TipcReplyWords(ctx, {std::clamp<u32>(
++                                    (Settings::values.hdr_peak_luminance.GetValue() * 2U + 2U) / 3U,
++                                    50U, 300U)});
++        }
+     }
+ 
+-    // nn::vi2::QueryDisplayHdrStatus(display name): u64 HdrOutputFormat, u16. The sdk's
+-    // DefaultDisplay::QueryHdrStatus takes format 1 as HDR output and fails with 0x272 on
+-    // anything above 1. With the empty auto stub reply it read the request's leftover words as
+-    // the format; Kirby Air Riders re-queries whenever its HDR status event fires and rebuilt its
+-    // window images every few frames, which showed black. Report SDR output.
+-    // nn::vi2::QueryDisplayHdrStatus(display name): u64 output format, u16 peak luminance in
+-    // nits. The sdk takes format 1 as SDR and 2 as HDR and fails the query on any other value.
+-    // Report SDR output with a typical SDR panel's peak.
++    // Wire reply: u64 output format (1 = SDR, 2 = HDR), u16 peak luminance in nits.
++    // MKW's SDK converts these to public formats 0/1 before DefaultDisplay tests for HDR.
++    // HDR is explicitly opt-in; luminance defaults are not host-display calibration.
++    // Reports the Vulkan HDR setting, not host support for individual HDR encodings.
+     void QueryDisplayHdrStatus(HLERequestContext& ctx) {
+-        TipcReplyWords(ctx, {1, 0, 400});
++        const bool hdr_enabled = Settings::values.hdr.GetValue() &&
++                                 Settings::values.renderer_backend.GetValue() ==
++                                     Settings::RendererBackend::Vulkan;
++        TipcReplyWords(ctx, {hdr_enabled ? 2U : 1U, 0, Settings::values.hdr_peak_luminance.GetValue()});
+     }
+ 
+     // 212(u64 layer): u64 bits of the layer's buffer slots that are ready. The client polls it once
+@@ -3174,6 +3212,7 @@ private:
              }
              pictures.clear();
              decoder->Decode(input.data, input.pts, pictures);
@@ -662,6 +849,64 @@ index 9f656e8df6..1d13f7d0cf 100644
              if (input.end) {
                  decoder->Drain(pictures);
              }
+@@ -3908,6 +3947,22 @@ private:
+         image.memory = w[19];
+         std::copy_n(w + 2, image.preference.size(), image.preference.begin());
+         image.size = Nx2CalculateImageLayout(w + 2).size;
++        // gsv 429's native format encodes color as well as storage; other commands use
++        // different descriptor layouts even though they share this handler.
++        if (ctx.GetCommand() == 429 && image.preference[1] == 1) {
++            switch (static_cast<Nx2NativeImageFormat>(image.preference[6])) {
++            case Nx2NativeImageFormat::Rgb10A2:
++                image.color_space = Tegra::ColorSpace::RGB2020_PQ;
++                break;
++            case Nx2NativeImageFormat::Rgba16Float:
++                image.color_space = Tegra::ColorSpace::RGB709_Linear;
++                image.linear_unit_luminance =
++                    static_cast<u16>((image.preference[7] >> 8) & 0xFFFF);
++                break;
++            default:
++                break;
++            }
++        }
+         LOG_INFO(Service, "nx2:gsv 429 CreateNativeImage memory={} count={} size={:#x} -> id {}",
+                  w[19], w[18], image.size, id);
+         TipcReplyWords(ctx, {id});
+diff --git a/src/core/hle/service/nx2_image_layout.h b/src/core/hle/service/nx2_image_layout.h
+index a0be66800d..3c861d9ec8 100644
+--- a/src/core/hle/service/nx2_image_layout.h
++++ b/src/core/hle/service/nx2_image_layout.h
+@@ -10,6 +10,13 @@
+ 
+ namespace Service {
+ 
++// Pixel format IDs in InterModuleUserImagePreference word 6.
++enum class Nx2NativeImageFormat : u32 {
++    Rgba8 = 1,
++    Rgb10A2 = 4,
++    Rgba16Float = 5,
++};
++
+ struct Nx2ImageLayout {
+     u32 width;
+     u32 height;
+@@ -25,12 +32,14 @@ inline Nx2ImageLayout Nx2CalculateImageLayout(const u32* preference) {
+     layout.height = (preference[2] >> 16) + 1;
+     const u64 pitch_gobs = preference[5];
+     const u32 block_height_log2 = preference[4];
+-    if (block_height_log2 <= 8 && pitch_gobs >= (u64{layout.width} * 4 + 63) / 64 &&
++    const u32 bytes_per_pixel =
++        static_cast<Nx2NativeImageFormat>(preference[6]) == Nx2NativeImageFormat::Rgba16Float ? 8 : 4;
++    if (block_height_log2 <= 8 && pitch_gobs >= (u64{layout.width} * bytes_per_pixel + 63) / 64 &&
+         pitch_gobs <= 4096) {
+         layout.pitch = pitch_gobs * 64;
+         layout.block_height_log2 = block_height_log2;
+     } else {
+-        layout.pitch = Common::AlignUp(u64{layout.width} * 4, 64);
++        layout.pitch = Common::AlignUp(u64{layout.width} * bytes_per_pixel, 64);
+         layout.block_height_log2 = 7;
+     }
+     const u64 block_rows = u64{1} << layout.block_height_log2;
 diff --git a/src/frontend_common/update_checker.cpp b/src/frontend_common/update_checker.cpp
 index 94ee0b33a6..c0a57a100a 100644
 --- a/src/frontend_common/update_checker.cpp
@@ -691,6 +936,34 @@ index 94ee0b33a6..c0a57a100a 100644
          return std::nullopt;
      }
      return number;
+diff --git a/src/qt_common/config/shared_translation.cpp b/src/qt_common/config/shared_translation.cpp
+index 2f76f716cf..395f2e9639 100644
+--- a/src/qt_common/config/shared_translation.cpp
++++ b/src/qt_common/config/shared_translation.cpp
+@@ -142,6 +142,23 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
+            "other race conditions."));
+ 
+     // Renderer
++    INSERT(Settings, hdr, tr("HDR"),
++           tr("Enables HDR output. Requires Vulkan and an HDR-enabled display.\n"
++              "Supports native HDR10 and scRGB output; SDR content is not converted to HDR.\n"
++              "HDR uses bilinear presentation without post-processing or frame generation.\n"
++              "Takes effect when a game starts."));
++    INSERT(Settings, hdr_reference_white, tr("HDR Reference White"),
++           tr("Reference white in nits reported to the game. Default: 200 nits, matching the "
++              "observed Switch 2 HDR applet's starting value without matching saved display "
++              "calibration. Set to 0 to follow Switch 2 calibration: HDR Peak Luminance divided "
++              "by 1.5, rounded up and clamped to 50-300 nits.\n"
++              "Set a nonzero value to override calibration.\n"
++              "Does not rescale the final image. Takes effect when a game starts."));
++    INSERT(Settings, hdr_peak_luminance, tr("HDR Peak Luminance"),
++           tr("Peak luminance in nits reported to the game. Default: 300 nits, matching the "
++              "observed Switch 2 HDR applet's starting value without matching saved display "
++              "calibration.\n"
++              "Does not rescale the final image. Takes effect when a game starts."));
+     INSERT(Settings, renderer_backend, tr("API:"),
+            tr("Changes the output graphics API.\nVulkan is recommended."));
+     INSERT(Settings, vulkan_device, tr("Device:"),
 diff --git a/src/tests/CMakeLists.txt b/src/tests/CMakeLists.txt
 index 58a569e189..144b0d27c2 100644
 --- a/src/tests/CMakeLists.txt
@@ -733,6 +1006,51 @@ index 481f5c5e1d..48dd887b97 100644
 +    CHECK(settings->async_presentation.GetValue());
 +    CHECK(settings->use_asynchronous_shaders.GetValue());
 +}
+diff --git a/src/tests/core/nx2_image_layout.cpp b/src/tests/core/nx2_image_layout.cpp
+index 66528c1ebe..9e81a4cc4c 100644
+--- a/src/tests/core/nx2_image_layout.cpp
++++ b/src/tests/core/nx2_image_layout.cpp
+@@ -26,6 +26,40 @@ TEST_CASE("Native color image requirements accept page-aligned storage", "[nx2_i
+     REQUIRE(0x1000 + layout.size <= 0x3000000);
+ }
+ 
++TEST_CASE("Native RGB10A2 storage preserves four-byte geometry", "[nx2_image_layout]") {
++    auto preference = ColorPreference;
++    preference[6] = 4;
++    const auto layout = Service::Nx2CalculateImageLayout(preference.data());
++    REQUIRE(layout.width == 3840);
++    REQUIRE(layout.height == 2160);
++    REQUIRE(layout.pitch == 0x3C00);
++    REQUIRE(layout.size == 0x1FE0000);
++    REQUIRE(layout.alignment == 0x2000);
++}
++
++TEST_CASE("Native FP16 storage uses eight-byte geometry", "[nx2_image_layout]") {
++    auto preference = ColorPreference;
++    preference[6] = 5;
++    preference[5] = 480;
++    const auto layout = Service::Nx2CalculateImageLayout(preference.data());
++    REQUIRE(layout.width == 3840);
++    REQUIRE(layout.height == 2160);
++    REQUIRE(layout.pitch == 0x7800);
++    REQUIRE(layout.block_height_log2 == 7);
++    REQUIRE(layout.size == 0x3FC0000);
++    REQUIRE(layout.alignment == 0x2000);
++}
++
++TEST_CASE("Native FP16 rejects a pitch sized for four-byte pixels", "[nx2_image_layout]") {
++    auto preference = ColorPreference;
++    preference[6] = 5;
++    preference[4] = 3;
++    const auto layout = Service::Nx2CalculateImageLayout(preference.data());
++    REQUIRE(layout.pitch == 0x7800);
++    REQUIRE(layout.block_height_log2 == 7);
++    REQUIRE(layout.size == 0x3FC0000);
++}
++
+ TEST_CASE("Native image base alignment does not shrink tile geometry", "[nx2_image_layout]") {
+     auto preference = ColorPreference;
+     preference[4] = 8;
 diff --git a/src/tests/video_core/nx2_written_pages.cpp b/src/tests/video_core/nx2_written_pages.cpp
 new file mode 100644
 index 0000000000..45c283667c
@@ -893,6 +1211,32 @@ index bf5aaabbba..bd4e4df351 100644
      if (has_host_buffer && (*channel_state->uniform_buffer_sizes)[stage][index] == 0x10000 &&
          size != 0 && gpu_memory != nullptr && gpu_memory->UsesNativeTiling() &&
          (Nx2Perf::Verify() || !native_indirect_uniforms_this_frame.contains(device_addr)) &&
+diff --git a/src/video_core/framebuffer_config.h b/src/video_core/framebuffer_config.h
+index bb041cf12f..1befb2ba29 100644
+--- a/src/video_core/framebuffer_config.h
++++ b/src/video_core/framebuffer_config.h
+@@ -24,6 +24,12 @@ enum class BlendMode {
+     Coverage,
+ };
+ 
++enum class ColorSpace {
++    RGB709, // Presented as sRGB.
++    RGB2020_PQ,
++    RGB709_Linear,
++};
++
+ /**
+  * Struct describing framebuffer configuration
+  */
+@@ -39,6 +45,8 @@ struct FramebufferConfig {
+     BlendMode blending{};
+     bool native_tiling{};
+     u32 layer_stack_mask{Service::Nvnflinger::DefaultLayerStackMask};
++    ColorSpace color_space{ColorSpace::RGB709};
++    u16 linear_unit_luminance{}; // Nits per linear 1.0; typically 80 for scRGB (observed in MKW's SDK).
+ };
+ 
+ Common::Rectangle<f32> NormalizeCrop(const FramebufferConfig& framebuffer, u32 texture_width,
 diff --git a/src/video_core/gpu.cpp b/src/video_core/gpu.cpp
 index a0c165b7aa..05997dd956 100644
 --- a/src/video_core/gpu.cpp
@@ -1326,6 +1670,345 @@ index 087714748a..af7387d28d 100644
      std::mutex cache_mutex;
  
      struct QueryCacheBaseImpl;
+diff --git a/src/video_core/renderer_opengl/present/layer.cpp b/src/video_core/renderer_opengl/present/layer.cpp
+index 2656892f4a..d8dc052fac 100644
+--- a/src/video_core/renderer_opengl/present/layer.cpp
++++ b/src/video_core/renderer_opengl/present/layer.cpp
+@@ -188,6 +188,11 @@ void Layer::ConfigureFramebufferTexture(const Tegra::FramebufferConfig& framebuf
+         framebuffer_texture.gl_format = GL_RGBA;
+         framebuffer_texture.gl_type = GL_UNSIGNED_INT_2_10_10_10_REV;
+         break;
++    case Service::android::PixelFormat::RgbaFp16:
++        internal_format = GL_RGBA16F;
++        framebuffer_texture.gl_format = GL_RGBA;
++        framebuffer_texture.gl_type = GL_HALF_FLOAT;
++        break;
+     case Service::android::PixelFormat::Rgb565:
+         internal_format = GL_RGB565;
+         framebuffer_texture.gl_format = GL_RGB;
+diff --git a/src/video_core/renderer_vulkan/present/frame_gen.cpp b/src/video_core/renderer_vulkan/present/frame_gen.cpp
+index d04765b0f1..475d5ed0ba 100644
+--- a/src/video_core/renderer_vulkan/present/frame_gen.cpp
++++ b/src/video_core/renderer_vulkan/present/frame_gen.cpp
+@@ -271,6 +271,16 @@ void FrameGen::Process(const Device& device, Frame* frame, VkFormat format,
+     }
+ }
+ 
++void FrameGen::Pause() {
++    pacer.Reset();
++    plan = {};
++    frame_count = 0;
++    last_count = 0;
++    last_generations = 0;
++    warm_streak = 0;
++    generated = false;
++}
++
+ size_t FrameGen::WantedGenerations(size_t capacity) {
+     if (unavailable) {
+         plan = {};
+diff --git a/src/video_core/renderer_vulkan/present/frame_gen.h b/src/video_core/renderer_vulkan/present/frame_gen.h
+index 87694aa5af..5b1b737ea9 100644
+--- a/src/video_core/renderer_vulkan/present/frame_gen.h
++++ b/src/video_core/renderer_vulkan/present/frame_gen.h
+@@ -27,6 +27,9 @@ public:
+ 
+     void Process(const Device& device, Frame* frame, VkFormat format, VkExtent2D guest_extent);
+ 
++    /// Retains resources while invalidating pacing and history across a presentation gap.
++    void Pause();
++
+     [[nodiscard]] size_t WantedGenerations(size_t capacity);
+ 
+     [[nodiscard]] size_t GeneratedFrameCount() const;
+diff --git a/src/video_core/renderer_vulkan/present/fsr3_frame_gen.cpp b/src/video_core/renderer_vulkan/present/fsr3_frame_gen.cpp
+index 1c2be1f567..84fe85c27f 100644
+--- a/src/video_core/renderer_vulkan/present/fsr3_frame_gen.cpp
++++ b/src/video_core/renderer_vulkan/present/fsr3_frame_gen.cpp
+@@ -300,6 +300,10 @@ void Fsr3FrameGen::CreatePipelines(const Device& device) {
+ 
+ void Fsr3FrameGen::Process(const Device& device, Scheduler& scheduler, VkImage current_frame,
+                            VkImageView, u64 frame_count) {
++    if (frame_count == 0) {
++        m_has_history = false;
++        m_flow_valid = false;
++    }
+     if (!m_has_history) {
+         // First frame: populate history and current-frame copy via batched dual-copy
+         scheduler.Record([this, current_frame](vk::CommandBuffer cmdbuf) {
+diff --git a/src/video_core/renderer_vulkan/present/layer.cpp b/src/video_core/renderer_vulkan/present/layer.cpp
+index 52ebbcdd2d..cc11ff6704 100644
+--- a/src/video_core/renderer_vulkan/present/layer.cpp
++++ b/src/video_core/renderer_vulkan/present/layer.cpp
+@@ -54,6 +54,8 @@ VkFormat GetFormat(const Tegra::FramebufferConfig& framebuffer) {
+         return VK_FORMAT_B8G8R8A8_UNORM;
+     case Service::android::PixelFormat::Rgba1010102:
+         return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
++    case Service::android::PixelFormat::RgbaFp16:
++        return VK_FORMAT_R16G16B16A16_SFLOAT;
+     default:
+         UNIMPLEMENTED_MSG("Unknown framebuffer pixel format: {}",
+                           static_cast<u32>(framebuffer.pixel_format));
+@@ -91,7 +93,7 @@ void Layer::ConfigureDraw(const Device& device, PresentPushConstants* out_push_c
+                           VkDescriptorSet* out_descriptor_set, RasterizerVulkan& rasterizer,
+                           VkSampler sampler, size_t image_index,
+                           const Tegra::FramebufferConfig& framebuffer,
+-                          const Layout::FramebufferLayout& layout) {
++                          const Layout::FramebufferLayout& layout, bool hdr_output) {
+     const auto texture_info = rasterizer.AccelerateDisplay(
+         framebuffer, framebuffer.address + framebuffer.offset, framebuffer.stride);
+     const u32 texture_width = texture_info ? texture_info->width : framebuffer.width;
+@@ -104,9 +106,11 @@ void Layer::ConfigureDraw(const Device& device, PresentPushConstants* out_push_c
+                                             Service::Nvnflinger::LayerStackId::Recording)) == 0;
+ 
+     RefreshResources(device, framebuffer);
+-    SetAntiAliasPass(device);
++    if (!hdr_output) {
++        SetAntiAliasPass(device);
++    }
+ #ifdef HAS_RESHADE
+-    SetPostProcessPass(device, is_applet);
++    SetPostProcessPass(device, is_applet || hdr_output);
+ #endif
+ 
+     // Finish any pending renderpass
+@@ -127,7 +131,7 @@ void Layer::ConfigureDraw(const Device& device, PresentPushConstants* out_push_c
+     const bool already_upscaled = texture_info && texture_info->already_upscaled;
+     // FXAA or SMAA on top of NVIDIA DLSS's image only blurs it.
+     const bool anti_aliased = already_upscaled || (texture_info && texture_info->anti_aliased);
+-    if (!anti_aliased) {
++    if (!hdr_output && !anti_aliased) {
+         if (auto* fxaa = std::get_if<FXAA>(&anti_alias)) {
+             fxaa->Draw(device, scheduler, image_index, &source_image, &source_image_view);
+         } else if (auto* smaa = std::get_if<SMAA>(&anti_alias)) {
+@@ -147,7 +151,7 @@ void Layer::ConfigureDraw(const Device& device, PresentPushConstants* out_push_c
+         .height = scaled_height,
+     };
+ 
+-    if (!already_upscaled) {
++    if (!hdr_output && !already_upscaled) {
+         if (auto* fsr = std::get_if<FSR>(&sr_filter)) {
+             source_image_view = fsr->Draw(device, scheduler, image_index, source_image, source_image_view, render_extent, crop_rect);
+             crop_rect = {0, 0, 1, 1};
+diff --git a/src/video_core/renderer_vulkan/present/layer.h b/src/video_core/renderer_vulkan/present/layer.h
+index 88fa0d6f9c..30a6549203 100644
+--- a/src/video_core/renderer_vulkan/present/layer.h
++++ b/src/video_core/renderer_vulkan/present/layer.h
+@@ -56,11 +56,12 @@ public:
+                    const PresentFilters& filters);
+     ~Layer();
+ 
++    /// Prepares layer descriptors and push constants, bypassing SDR effects only for HDR output.
+     void ConfigureDraw(const Device& device, PresentPushConstants* out_push_constants,
+                        VkDescriptorSet* out_descriptor_set, RasterizerVulkan& rasterizer,
+                        VkSampler sampler, size_t image_index,
+                        const Tegra::FramebufferConfig& framebuffer,
+-                       const Layout::FramebufferLayout& layout);
++                       const Layout::FramebufferLayout& layout, bool hdr_output);
+ 
+ private:
+     void CreateDescriptorPool(const Device& device);
+diff --git a/src/video_core/renderer_vulkan/present/window_adapt_pass.cpp b/src/video_core/renderer_vulkan/present/window_adapt_pass.cpp
+index 549b0660c1..6ded3653f5 100644
+--- a/src/video_core/renderer_vulkan/present/window_adapt_pass.cpp
++++ b/src/video_core/renderer_vulkan/present/window_adapt_pass.cpp
+@@ -34,7 +34,7 @@ WindowAdaptPass::~WindowAdaptPass() = default;
+ void WindowAdaptPass::Draw(const Device& device, RasterizerVulkan& rasterizer, Scheduler& scheduler, size_t image_index,
+                            std::list<Layer>& layers,
+                            std::span<const Tegra::FramebufferConfig> configs,
+-                           const Layout::FramebufferLayout& layout, Frame* dst) {
++                           const Layout::FramebufferLayout& layout, Frame* dst, bool hdr_output) {
+ 
+     const VkFramebuffer host_framebuffer{*dst->framebuffer};
+     const VkRenderPass renderpass{*render_pass};
+@@ -65,7 +65,7 @@ void WindowAdaptPass::Draw(const Device& device, RasterizerVulkan& rasterizer, S
+         }
+ 
+         layer_it->ConfigureDraw(device, &push_constants[i], &descriptor_sets[i], rasterizer, *sampler,
+-                                image_index, configs[i], layout);
++                                image_index, configs[i], layout, hdr_output);
+         layer_it++;
+     }
+ 
+diff --git a/src/video_core/renderer_vulkan/present/window_adapt_pass.h b/src/video_core/renderer_vulkan/present/window_adapt_pass.h
+index 58d6fc01c0..d3ae32e2e8 100644
+--- a/src/video_core/renderer_vulkan/present/window_adapt_pass.h
++++ b/src/video_core/renderer_vulkan/present/window_adapt_pass.h
+@@ -33,9 +33,10 @@ public:
+                              vk::ShaderModule&& fragment_shader);
+     ~WindowAdaptPass();
+ 
++    /// Draws the layers to dst, forwarding the selected HDR-output state to each layer.
+     void Draw(const Device& device, RasterizerVulkan& rasterizer, Scheduler& scheduler, size_t image_index,
+               std::list<Layer>& layers, std::span<const Tegra::FramebufferConfig> configs,
+-              const Layout::FramebufferLayout& layout, Frame* dst);
++              const Layout::FramebufferLayout& layout, Frame* dst, bool hdr_output);
+ 
+     VkDescriptorSetLayout GetDescriptorSetLayout();
+     VkRenderPass GetRenderPass();
+diff --git a/src/video_core/renderer_vulkan/renderer_vulkan.cpp b/src/video_core/renderer_vulkan/renderer_vulkan.cpp
+index 4dbd14cc4e..a300c4ce19 100644
+--- a/src/video_core/renderer_vulkan/renderer_vulkan.cpp
++++ b/src/video_core/renderer_vulkan/renderer_vulkan.cpp
+@@ -236,25 +236,52 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
+     const auto acquired = trace ? std::chrono::steady_clock::now()
+                                 : std::chrono::steady_clock::time_point{};
+ 
++#ifdef __ANDROID__
++    VkFormat output_format = VK_FORMAT_R8G8B8A8_UNORM;
++#else
++    VkFormat output_format = VK_FORMAT_B8G8R8A8_UNORM;
++#endif
++    const bool hdr_output =
++        Settings::values.hdr.GetValue() && framebuffers.size() == 1 &&
++        framebuffers.front().color_space != Tegra::ColorSpace::RGB709;
++    if (hdr_output) {
++        // The guest sees HDR availability, not individual encodings. Presentation must reject an
++        // unavailable pair rather than reinterpret an already-rendered HDR frame as SDR.
++        switch (framebuffers.front().color_space) {
++        case Tegra::ColorSpace::RGB2020_PQ:
++            output_format = VK_FORMAT_A2B10G10R10_UNORM_PACK32;
++            frame->color_space = VK_COLOR_SPACE_HDR10_ST2084_EXT;
++            break;
++        case Tegra::ColorSpace::RGB709_Linear:
++            output_format = VK_FORMAT_R16G16B16A16_SFLOAT;
++            frame->color_space = VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT;
++            break;
++        default:
++            break;
++        }
++    }
++
+     scheduler.RequestOutsideRenderPassOperationContext();
+     blit_swapchain.DrawToFrame(device, rasterizer, frame, framebuffers,
+-                               render_window.GetFramebufferLayout(),
+-                               present_manager.SwapchainImageCount(),
+-                               swapchain.GetImageViewFormat());
++                              render_window.GetFramebufferLayout(),
++                              present_manager.SwapchainImageCount(), output_format, hdr_output);
+ 
+ #ifdef HAS_LSFG
+-    void(frame_gen.WantedGenerations(present_manager.MaxExtraFrames()));
+-
+-    frame_gen.Process(device, frame, present_manager.SwapchainImageFormat(),
+-                      GuestExtent(framebuffers));
+-
+-    const size_t generated_frames = frame_gen.GeneratedFrameCount();
+-    for (size_t generation = 0; generation < generated_frames; ++generation) {
+-        Frame* generated = present_manager.GetRenderFrame();
+-        blit_swapchain.PrepareFrame(device, generated, render_window.GetFramebufferLayout());
+-        frame_gen.GenerateInto(device, generated, generation);
+-        scheduler.Flush(*generated->render_ready);
+-        present_manager.Present(generated);
++    if (hdr_output) {
++        frame_gen.Pause();
++    } else {
++        void(frame_gen.WantedGenerations(present_manager.MaxExtraFrames()));
++
++        frame_gen.Process(device, frame, frame->image_format, GuestExtent(framebuffers));
++
++        const size_t generated_frames = frame_gen.GeneratedFrameCount();
++        for (size_t generation = 0; generation < generated_frames; ++generation) {
++            Frame* generated = present_manager.GetRenderFrame();
++            blit_swapchain.PrepareFrame(device, generated, render_window.GetFramebufferLayout());
++            frame_gen.GenerateInto(device, generated, generation);
++            scheduler.Flush(*generated->render_ready);
++            present_manager.Present(generated);
++        }
+     }
+ #endif
+ 
+@@ -334,7 +361,7 @@ vk::Buffer RendererVulkan::RenderToBuffer(std::span<const Tegra::FramebufferConf
+     }();
+ 
+     auto dst_buffer = CreateWrappedBuffer(memory_allocator, buffer_size, MemoryUsage::Download);
+-    blit_capture.DrawToFrame(device, rasterizer, &frame, framebuffers, layout, 1, format);
++    blit_capture.DrawToFrame(device, rasterizer, &frame, framebuffers, layout, 1, format, false);
+ 
+     scheduler.RequestOutsideRenderPassOperationContext();
+     scheduler.Record([&](vk::CommandBuffer cmdbuf) {
+@@ -413,7 +440,7 @@ void RendererVulkan::RenderAppletCaptureLayer(
+ 
+     scheduler.RequestOutsideRenderPassOperationContext();
+     blit_applet.DrawToFrame(device, rasterizer, &applet_frame, capture_layers, VideoCore::Capture::Layout, 1,
+-                            CaptureFormat);
++                            CaptureFormat, false);
+ }
+ 
+ } // namespace Vulkan
+diff --git a/src/video_core/renderer_vulkan/vk_blit_screen.cpp b/src/video_core/renderer_vulkan/vk_blit_screen.cpp
+index d4a3c8972b..2c3e9af8ba 100644
+--- a/src/video_core/renderer_vulkan/vk_blit_screen.cpp
++++ b/src/video_core/renderer_vulkan/vk_blit_screen.cpp
+@@ -42,6 +42,12 @@ void BlitScreen::SetWindowAdaptPass(const Device& device) {
+     layers.clear();
+     scaling_filter = filters.get_scaling_filter();
+ 
++    if (swapchain_view_format == VK_FORMAT_R16G16B16A16_SFLOAT ||
++        swapchain_view_format == VK_FORMAT_A2B10G10R10_UNORM_PACK32) {
++        window_adapt = MakeBilinear(device, swapchain_view_format);
++        return;
++    }
++
+     switch (scaling_filter) {
+     case Settings::ScalingFilter::NearestNeighbor:
+         window_adapt = MakeNearestNeighbor(device, swapchain_view_format);
+@@ -93,7 +99,9 @@ void BlitScreen::PrepareFrame(const Device& device, Frame* frame,
+         return;
+     }
+ 
+-    if (frame->width != layout.width || frame->height != layout.height) {
++    if (frame->width != layout.width || frame->height != layout.height ||
++        frame->format != swapchain_view_format ||
++        frame->image_format != present_manager.GetFrameImageFormat(swapchain_view_format)) {
+         WaitIdle(device);
+     } else if (!present_manager.NeedsStorage(frame, true)) {
+         return;
+@@ -107,7 +115,7 @@ void BlitScreen::DrawToFrame(const Device& device, RasterizerVulkan& rasterizer,
+                              std::span<const Tegra::FramebufferConfig> framebuffers,
+                              const Layout::FramebufferLayout& layout,
+                              size_t current_swapchain_image_count,
+-                             VkFormat current_swapchain_view_format) {
++                             VkFormat current_swapchain_view_format, bool hdr_output) {
+     bool resource_update_required = false;
+     bool presentation_recreate_required = false;
+ 
+@@ -121,6 +129,8 @@ void BlitScreen::DrawToFrame(const Device& device, RasterizerVulkan& rasterizer,
+     }
+ 
+     if (swapchain_view_format != current_swapchain_view_format ||
++        frame->format != current_swapchain_view_format ||
++        frame->image_format != present_manager.GetFrameImageFormat(current_swapchain_view_format) ||
+         layout.width != frame->width || layout.height != frame->height) {
+         resource_update_required = true;
+         presentation_recreate_required = true;
+@@ -156,7 +166,8 @@ void BlitScreen::DrawToFrame(const Device& device, RasterizerVulkan& rasterizer,
+         }
+     }
+ 
+-    window_adapt->Draw(device, rasterizer, scheduler, image_index, layers, framebuffers, layout, frame);
++    window_adapt->Draw(device, rasterizer, scheduler, image_index, layers, framebuffers, layout, frame,
++                       hdr_output);
+ 
+     if (++image_index >= image_count) {
+         image_index = 0;
+diff --git a/src/video_core/renderer_vulkan/vk_blit_screen.h b/src/video_core/renderer_vulkan/vk_blit_screen.h
+index 659d0fb5ff..e234b9049f 100644
+--- a/src/video_core/renderer_vulkan/vk_blit_screen.h
++++ b/src/video_core/renderer_vulkan/vk_blit_screen.h
+@@ -57,10 +57,11 @@ public:
+                         Scheduler& scheduler, const PresentFilters& filters);
+     ~BlitScreen();
+ 
++    /// Composites layers into a frame; hdr_output bypasses SDR effects and is false for captures.
+     void DrawToFrame(const Device& device, RasterizerVulkan& rasterizer, Frame* frame,
+                      std::span<const Tegra::FramebufferConfig> framebuffers,
+                      const Layout::FramebufferLayout& layout, size_t current_swapchain_image_count,
+-                     VkFormat current_swapchain_view_format);
++                     VkFormat current_swapchain_view_format, bool hdr_output);
+ 
+     void PrepareFrame(const Device& device, Frame* frame, const Layout::FramebufferLayout& layout);
+ 
 diff --git a/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp b/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp
 index ecde60dea3..0a70e85fc4 100644
 --- a/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp
@@ -1570,6 +2253,222 @@ index 697f39f3c7..d6f97a75f3 100644
      VkImage CompositedImage() const;
      VkImageView CompositedView() const;
  
+diff --git a/src/video_core/renderer_vulkan/vk_present_manager.cpp b/src/video_core/renderer_vulkan/vk_present_manager.cpp
+index 7d254c9125..f14e9688cf 100644
+--- a/src/video_core/renderer_vulkan/vk_present_manager.cpp
++++ b/src/video_core/renderer_vulkan/vk_present_manager.cpp
+@@ -127,7 +127,6 @@ PresentManager::PresentManager(const vk::Instance& instance_,
+     , scheduler{scheduler_}
+     , swapchain{swapchain_}
+     , surface{surface_}
+-    , blit_supported{CanBlitToSwapchain(device.GetPhysical(), swapchain.GetImageViewFormat())}
+     , storage_supported{CanStoreToFrame(device.GetPhysical(), swapchain.GetImageFormat())}
+     , use_present_thread{Settings::values.async_presentation.GetValue()}
+ {
+@@ -182,6 +181,7 @@ Frame* PresentManager::GetRenderFrame() {
+     // Wait for the presentation to be finished so all frame resources are free
+     frame->present_done.Wait();
+     frame->present_done.Reset();
++    frame->color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+ 
+     return frame;
+ }
+@@ -208,12 +208,24 @@ bool PresentManager::NeedsStorage(const Frame* frame, bool required) const {
+     return required && frame->storage_capable && !frame->storage_view;
+ }
+ 
++VkFormat PresentManager::GetFrameImageFormat(VkFormat image_view_format) const {
++    if (image_view_format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 ||
++        image_view_format == VK_FORMAT_R16G16B16A16_SFLOAT) {
++        return image_view_format;
++    }
++    // Render SDR through a UNORM view, but preserve the surface's transfer encoding for blits.
++    return swapchain.GetSdrImageFormat();
++}
++
+ void PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height, VkFormat image_view_format,
+                                    VkRenderPass rd, bool storage) {
+     auto& dld = device.GetLogical();
+ 
+     frame->width = width;
+     frame->height = height;
++    frame->format = image_view_format;
++    frame->image_format = GetFrameImageFormat(image_view_format);
++    frame->storage_capable = CanStoreToFrame(device.GetPhysical(), frame->image_format);
+ 
+     const bool with_storage = storage && frame->storage_capable;
+     VkImageUsageFlags storage_usage = 0;
+@@ -226,7 +238,7 @@ void PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height, VkFormat
+         .pNext = nullptr,
+         .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT,
+         .imageType = VK_IMAGE_TYPE_2D,
+-        .format = swapchain.GetImageFormat(),
++        .format = frame->image_format,
+         .extent =
+             {
+                 .width = width,
+@@ -277,7 +289,7 @@ void PresentManager::RecreateFrame(Frame* frame, u32 width, u32 height, VkFormat
+             .flags = 0,
+             .image = *frame->image,
+             .viewType = VK_IMAGE_VIEW_TYPE_2D,
+-            .format = swapchain.GetImageFormat(),
++            .format = frame->image_format,
+             .components =
+                 {
+                     .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+@@ -355,9 +367,32 @@ void PresentManager::PresentThread(std::stop_token token) {
+     }
+ }
+ 
+-void PresentManager::RecreateSwapchain(Frame* frame) {
+-    swapchain.Create(*surface, frame->width, frame->height); // Pass raw pointer
+-    SetImageCount();
++// Returns false after discarding a deferred or incompatible frame; creation exceptions propagate.
++bool PresentManager::RecreateSwapchain(Frame* frame) {
++    if (swapchain.Create(*surface, frame->width, frame->height, frame->format,
++                         frame->color_space)) {
++        SetImageCount();
++        ConfigureTransfer(frame);
++        if (transfer_mode != TransferMode::Unsupported) {
++            return true;
++        }
++    }
++    DiscardFrame(frame);
++    return false;
++}
++
++void PresentManager::ConfigureTransfer(const Frame* frame) {
++    transfer_source_format = frame->image_format;
++    transfer_mode = TransferMode::Unsupported;
++    if (frame->image_format == GetFrameImageFormat(frame->format)) {
++        if (CanBlitToSwapchain(device.GetPhysical(), swapchain.GetImageFormat()) &&
++            (device.GetPhysical().GetFormatProperties(frame->image_format).optimalTilingFeatures &
++             VK_FORMAT_FEATURE_BLIT_SRC_BIT) != 0) {
++            transfer_mode = TransferMode::Blit;
++        } else if (frame->image_format == swapchain.GetImageFormat()) {
++            transfer_mode = TransferMode::Copy;
++        }
++    }
+ }
+ 
+ void PresentManager::SetImageCount() {
+@@ -406,7 +441,9 @@ void PresentManager::CopyToSwapchain(Frame* frame) {
+ #ifdef __ANDROID__
+                 surface = CreateSurface(instance, render_window.GetWindowInfo());
+ #endif
+-                RecreateSwapchain(frame);
++                if (!RecreateSwapchain(frame)) {
++                    return;
++                }
+             }
+ 
+             // Draw to swapchain.
+@@ -427,13 +464,25 @@ void PresentManager::CopyToSwapchain(Frame* frame) {
+ 
+ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
+ 
+-    // If the size of the incoming frames has changed, recreate the swapchain
+-    // to account for that.
++    // Recreate for size changes, SDR/HDR10/scRGB transitions, or a suboptimal swapchain.
+     const bool is_suboptimal = swapchain.NeedsRecreation() || swapchain.IsOutDated();
+     const bool size_changed =
+         swapchain.GetWidth() != frame->width || swapchain.GetHeight() != frame->height;
+-    if (is_suboptimal || size_changed) {
+-        RecreateSwapchain(frame);
++    const bool format_changed = swapchain.GetRequestedFormat() != frame->format;
++    const bool color_space_changed = swapchain.GetRequestedColorSpace() != frame->color_space;
++    if (is_suboptimal || size_changed || format_changed || color_space_changed) {
++        if (!RecreateSwapchain(frame)) {
++            return;
++        }
++    }
++
++    // Queued SDR frames can retain an older underlying format after surface recreation.
++    if (transfer_source_format != frame->image_format) {
++        ConfigureTransfer(frame);
++    }
++    if (transfer_mode == TransferMode::Unsupported) {
++        DiscardFrame(frame);
++        return;
+     }
+     if (!swapchain.IsCreated()) {
+         DiscardFrame(frame);
+@@ -441,7 +490,9 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
+     }
+ 
+     while (swapchain.AcquireNextImage(!use_present_thread)) {
+-        RecreateSwapchain(frame);
++        if (!RecreateSwapchain(frame)) {
++            return;
++        }
+     }
+ 
+     const vk::CommandBuffer cmdbuf{frame->cmdbuf};
+@@ -534,7 +585,7 @@ void PresentManager::CopyToSwapchainImpl(Frame* frame) {
+     cmdbuf.PipelineBarrier(vk::PIPELINE_STAGE_GRAPHICS_COMPUTE_TRANSFER, VK_PIPELINE_STAGE_TRANSFER_BIT, {},
+                            {}, {}, pre_barriers);
+ 
+-    if (blit_supported) {
++    if (transfer_mode == TransferMode::Blit) {
+         cmdbuf.BlitImage(*frame->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          MakeImageBlit(frame->width, frame->height, extent.width, extent.height),
+diff --git a/src/video_core/renderer_vulkan/vk_present_manager.h b/src/video_core/renderer_vulkan/vk_present_manager.h
+index ab2b76f10f..67d31cc3a0 100644
+--- a/src/video_core/renderer_vulkan/vk_present_manager.h
++++ b/src/video_core/renderer_vulkan/vk_present_manager.h
+@@ -30,6 +30,10 @@ struct Frame {
+     u32 width;
+     u32 height;
+     u32 index;
++    // Requested presentation view format and underlying image format may differ for SDR.
++    VkFormat format{VK_FORMAT_UNDEFINED};
++    VkFormat image_format{VK_FORMAT_UNDEFINED};
++    VkColorSpaceKHR color_space{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+     vk::Image image;
+     vk::ImageView image_view;
+     vk::ImageView storage_view;
+@@ -63,6 +67,9 @@ public:
+ 
+     [[nodiscard]] bool NeedsStorage(const Frame* frame, bool required) const;
+ 
++    /// Selects the backing image format, preserving the cached SDR format or explicit HDR format.
++    [[nodiscard]] VkFormat GetFrameImageFormat(VkFormat image_view_format) const;
++
+     /// Waits for the present thread to finish presenting all queued frames.
+     void WaitPresent();
+ 
+@@ -73,13 +80,19 @@ public:
+     [[nodiscard]] VkFormat SwapchainImageFormat() const { return swapchain_image_format; }
+ 
+ private:
++    enum class TransferMode { Unsupported, Copy, Blit };
++
+     void PresentThread(std::stop_token token);
+ 
+     void CopyToSwapchain(Frame* frame);
+ 
+     void CopyToSwapchainImpl(Frame* frame);
+ 
+-    void RecreateSwapchain(Frame* frame);
++    // Returns false after discarding the frame if creation or transfer cannot proceed.
++    bool RecreateSwapchain(Frame* frame);
++
++    /// Caches a copy, blit, or unsupported transfer decision for this frame and active swapchain.
++    void ConfigureTransfer(const Frame* frame);
+ 
+     void DiscardFrame(Frame* frame);
+ 
+@@ -103,7 +116,8 @@ private:
+     std::mutex queue_mutex;
+     std::mutex free_mutex;
+     std::jthread present_thread;
+-    bool blit_supported;
++    VkFormat transfer_source_format{VK_FORMAT_UNDEFINED};
++    TransferMode transfer_mode{TransferMode::Unsupported};
+     bool storage_supported;
+     bool use_present_thread;
+     std::atomic<std::size_t> image_count{};
 diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
 index 8fe469ac86..1aae7bc140 100644
 --- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
@@ -1856,8 +2755,223 @@ index 412502b169..eb76153dd9 100644
      VkExtent2D render_extent{};
      VkExtent2D upscale_extent{};
      bool hdr_input = true;
+diff --git a/src/video_core/renderer_vulkan/vk_swapchain.cpp b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+index 2cbdcbef49..ca530118f6 100644
+--- a/src/video_core/renderer_vulkan/vk_swapchain.cpp
++++ b/src/video_core/renderer_vulkan/vk_swapchain.cpp
+@@ -27,7 +27,17 @@ namespace Vulkan {
+ 
+ namespace {
+ 
+-VkSurfaceFormatKHR ChooseSwapSurfaceFormat(vk::Span<VkSurfaceFormatKHR> formats) {
++VkSurfaceFormatKHR ChooseSwapSurfaceFormat(vk::Span<VkSurfaceFormatKHR> formats,
++                                         VkFormat requested_format,
++                                         VkColorSpaceKHR requested_color_space) {
++    if (requested_format == VK_FORMAT_R16G16B16A16_SFLOAT ||
++        requested_format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 ||
++        requested_color_space != VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
++        return {
++            .format = requested_format,
++            .colorSpace = requested_color_space,
++        };
++    }
+     if (formats.size() == 1 && formats[0].format == VK_FORMAT_UNDEFINED) {
+         VkSurfaceFormatKHR format;
+         format.format = VK_FORMAT_B8G8R8A8_UNORM;
+@@ -38,7 +48,16 @@ VkSurfaceFormatKHR ChooseSwapSurfaceFormat(vk::Span<VkSurfaceFormatKHR> formats)
+         return format.format == VK_FORMAT_B8G8R8A8_UNORM &&
+                format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+     });
+-    return found != formats.end() ? *found : formats[0];
++    if (found != formats.end()) {
++        return *found;
++    }
++    const auto sdr = std::find_if(formats.begin(), formats.end(), [](const auto& format) {
++        return format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
++    });
++    return sdr != formats.end()
++               ? *sdr
++               : VkSurfaceFormatKHR{.format = requested_format,
++                                    .colorSpace = requested_color_space};
+ }
+ 
+ static VkPresentModeKHR ChooseSwapPresentMode(bool has_imm, bool has_mailbox,
+@@ -127,26 +146,34 @@ Swapchain::Swapchain(
+     , device{device_}
+     , scheduler{scheduler_}
+ {
+-    Create(surface, width_, height_);
++    if (!Create(surface, width_, height_)) {
++        LOG_ERROR(Render_Vulkan, "Initial swapchain creation failed: surface has zero extent");
++        throw vk::Exception(VK_ERROR_INITIALIZATION_FAILED);
++    }
+ }
+ 
+ Swapchain::~Swapchain() = default;
+ 
+-void Swapchain::Create(
++bool Swapchain::Create(
+     VkSurfaceKHR_T* surface_,
+     u32 width_,
+-    u32 height_)
++    u32 height_,
++    VkFormat requested_format_,
++    VkColorSpaceKHR requested_color_space_)
+ {
+     is_outdated = false;
+-    is_suboptimal = false;
++    // Keep recreation pending until creation succeeds, including zero-extent surfaces.
++    is_suboptimal = true;
+     width = width_;
+     height = height_;
+     surface = surface_;
++    requested_format = requested_format_;
++    requested_color_space = requested_color_space_;
+ 
+     const auto physical_device = device.GetPhysical();
+     const auto capabilities{physical_device.GetSurfaceCapabilitiesKHR(VkSurfaceKHR(surface))};
+     if (capabilities.maxImageExtent.width == 0 || capabilities.maxImageExtent.height == 0) {
+-        return;
++        return false;
+     }
+ 
+     // Submitted work may still wait on the old acquire/present semaphores; destroying them under
+@@ -163,9 +190,11 @@ void Swapchain::Create(
+ 
+     CreateSwapchain(capabilities);
+     CreateSemaphores();
++    is_suboptimal = false;
+ 
+     resource_ticks.clear();
+     resource_ticks.resize(image_count);
++    return true;
+ }
+ 
+ bool Swapchain::AcquireNextImage(bool may_flush) {
+@@ -270,6 +299,10 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
+     const auto formats{physical_device.GetSurfaceFormatsKHR(VkSurfaceKHR(surface))};
+     const auto present_modes = physical_device.GetSurfacePresentModesKHR(VkSurfaceKHR(surface));
+ 
++    // Keep the SDR choice available even while the active swapchain is HDR.
++    sdr_image_format = ChooseSwapSurfaceFormat(formats, VK_FORMAT_B8G8R8A8_UNORM,
++                                              VK_COLOR_SPACE_SRGB_NONLINEAR_KHR).format;
++
+     has_mailbox = std::find(present_modes.begin(), present_modes.end(), VK_PRESENT_MODE_MAILBOX_KHR)
+                   != present_modes.end();
+     has_imm = std::find(present_modes.begin(), present_modes.end(),
+@@ -278,7 +311,7 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
+                                  VK_PRESENT_MODE_FIFO_RELAXED_KHR) != present_modes.end();
+ 
+     const VkCompositeAlphaFlagBitsKHR alpha_flags{ChooseAlphaFlags(capabilities)};
+-    surface_format = ChooseSwapSurfaceFormat(formats);
++    surface_format = ChooseSwapSurfaceFormat(formats, requested_format, requested_color_space);
+     present_mode = ChooseSwapPresentMode(has_imm, has_mailbox, has_fifo_relaxed);
+ 
+     u32 requested_image_count{capabilities.minImageCount + 1};
+@@ -343,7 +376,8 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
+         .viewFormatCount = static_cast<u32>(view_formats.size()),
+         .pViewFormats = view_formats.data(),
+     };
+-    if (device.IsKhrSwapchainMutableFormatEnabled()) {
++    if (device.IsKhrSwapchainMutableFormatEnabled() &&
++        surface_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+         format_list.pNext = std::exchange(swapchain_ci.pNext, &format_list);
+         swapchain_ci.flags |= VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR;
+     }
+@@ -363,6 +397,9 @@ void Swapchain::CreateSwapchain(const VkSurfaceCapabilitiesKHR& capabilities) {
+ #else
+     image_view_format = VK_FORMAT_B8G8R8A8_UNORM;
+ #endif
++    if (surface_format.colorSpace != VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
++        image_view_format = surface_format.format;
++    }
+ }
+ 
+ void Swapchain::CreateSemaphores() {
+diff --git a/src/video_core/renderer_vulkan/vk_swapchain.h b/src/video_core/renderer_vulkan/vk_swapchain.h
+index 584399567d..0a194f7f0d 100644
+--- a/src/video_core/renderer_vulkan/vk_swapchain.h
++++ b/src/video_core/renderer_vulkan/vk_swapchain.h
+@@ -6,6 +6,7 @@
+ 
+ #pragma once
+ 
++#include <atomic>
+ #include <vector>
+ 
+ #include "common/common_types.h"
+@@ -22,6 +23,8 @@ class Scheduler;
+ 
+ class Swapchain {
+ public:
++    /// Creates the initial SDR swapchain without probing HDR encodings.
++    /// Throws on startup failure rather than constructing an unusable presenter.
+     explicit Swapchain(
+         VkSurfaceKHR_T* surface,
+         const Device& device,
+@@ -30,11 +33,13 @@ public:
+         u32 height);
+     ~Swapchain();
+ 
+-    /// Creates (or recreates) the swapchain with a given size.
+-    void Create(
++    /// Creates (or recreates) the swapchain; returns false when deferred for zero extent.
++    bool Create(
+         VkSurfaceKHR_T* surface,
+         u32 width,
+-        u32 height);
++        u32 height,
++        VkFormat requested_format = VK_FORMAT_B8G8R8A8_UNORM,
++        VkColorSpaceKHR requested_color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
+ 
+     /// Acquires the next image in the swapchain, waits as needed. Returns true when no image was
+     /// acquired (out of date) and the swapchain has to be recreated first.
+@@ -95,6 +100,20 @@ public:
+         return surface_format.format;
+     }
+ 
++    /// Returns the cached SDR surface format, including while an HDR swapchain is active.
++    VkFormat GetSdrImageFormat() const {
++        return sdr_image_format.load();
++    }
++
++    /// Returns the producer format requested by the latest creation attempt.
++    VkFormat GetRequestedFormat() const {
++        return requested_format;
++    }
++
++    VkColorSpaceKHR GetRequestedColorSpace() const {
++        return requested_color_space;
++    }
++
+     VkSemaphore CurrentPresentSemaphore() const {
+         return *present_semaphores[frame_index];
+     }
+@@ -147,6 +166,9 @@ private:
+     VkExtent2D extent{};
+     VkPresentModeKHR present_mode{};
+     VkSurfaceFormatKHR surface_format{};
++    std::atomic<VkFormat> sdr_image_format{VK_FORMAT_B8G8R8A8_UNORM};
++    VkFormat requested_format{VK_FORMAT_B8G8R8A8_UNORM};
++    VkColorSpaceKHR requested_color_space{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+     bool has_imm{false};
+     bool has_mailbox{false};
+     bool has_fifo_relaxed{false};
+diff --git a/src/video_core/surface.cpp b/src/video_core/surface.cpp
+index da57da6917..9ce8bec55d 100644
+--- a/src/video_core/surface.cpp
++++ b/src/video_core/surface.cpp
+@@ -240,6 +240,8 @@ PixelFormat PixelFormatFromGPUPixelFormat(Service::android::PixelFormat format)
+         return PixelFormat::B8G8R8A8_UNORM;
+     case Service::android::PixelFormat::Rgba1010102:
+         return PixelFormat::A2B10G10R10_UNORM;
++    case Service::android::PixelFormat::RgbaFp16:
++        return PixelFormat::R16G16B16A16_FLOAT;
+     default:
+         UNIMPLEMENTED_MSG("Unimplemented format={}", format);
+         return PixelFormat::A8B8G8R8_UNORM;
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 93db205836..b7123d1679 100644
+index 93db205836..10ee7aaa06 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -281,6 +281,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
@@ -1873,6 +2987,87 @@ index 93db205836..b7123d1679 100644
      if (log) {
          LOG_INFO(HW_GPU, "Texture cache thresholds: expected {} MiB, critical {} MiB, minimum {} MiB",
                   expected_memory >> 20, critical_memory >> 20, minimum_memory >> 20);
+@@ -1429,6 +1435,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
+             return PixelFormat::R5G6B5_UNORM;
+         case Service::android::PixelFormat::Bgra8888:
+             return PixelFormat::B8G8R8A8_UNORM;
++        case Service::android::PixelFormat::Rgba1010102:
++            return PixelFormat::A2B10G10R10_UNORM;
++        case Service::android::PixelFormat::RgbaFp16:
++            return PixelFormat::R16G16B16A16_FLOAT;
+         default:
+             return PixelFormat::A8B8G8R8_UNORM;
+         }
+diff --git a/src/video_core/vulkan_common/vulkan_instance.cpp b/src/video_core/vulkan_common/vulkan_instance.cpp
+index 3ab924e37f..4321f9b83f 100644
+--- a/src/video_core/vulkan_common/vulkan_instance.cpp
++++ b/src/video_core/vulkan_common/vulkan_instance.cpp
+@@ -78,6 +78,12 @@ namespace {
+     }
+     if (window_type != Core::Frontend::WindowSystemType::Headless) {
+         extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
++        if (std::ranges::any_of(properties, [](const VkExtensionProperties& property) {
++                return std::strcmp(property.extensionName,
++                                   VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME) == 0;
++            })) {
++            extensions.push_back(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
++        }
+     }
+     // Probe optional extensions against the same snapshot the caller verifies against, so the
+     // check here and the verification in CreateInstance can never disagree (see TOCTOU note below).
+diff --git a/src/yuzu/configuration/configure_graphics.cpp b/src/yuzu/configuration/configure_graphics.cpp
+index 09ae6adf6e..b7447998b9 100644
+--- a/src/yuzu/configuration/configure_graphics.cpp
++++ b/src/yuzu/configuration/configure_graphics.cpp
+@@ -235,7 +235,12 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
+ #endif
+ 
+         ConfigurationShared::Widget* widget = [&]() {
+-            if (setting->Id() == Settings::values.fsr_sharpening_slider.Id()) {
++            if (setting->Id() == Settings::values.hdr_reference_white.Id() ||
++                setting->Id() == Settings::values.hdr_peak_luminance.Id()) {
++                return builder.BuildWidget(setting, apply_funcs,
++                                           ConfigurationShared::RequestType::SpinBox, true, 1.0f,
++                                           nullptr, tr("nits"));
++            } else if (setting->Id() == Settings::values.fsr_sharpening_slider.Id()) {
+                 // FSR needs a reversed slider and a 0.5 multiplier
+                 return builder.BuildWidget(
+                     setting, apply_funcs, ConfigurationShared::RequestType::ReverseSlider, true,
+@@ -253,6 +258,12 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
+             continue;
+         }
+ 
++        if (setting->Id() == Settings::values.hdr.Id() ||
++            setting->Id() == Settings::values.hdr_reference_white.Id() ||
++            setting->Id() == Settings::values.hdr_peak_luminance.Id()) {
++            hdr_widgets.push_back(widget);
++        }
++
+         if (setting->Id() == Settings::values.renderer_backend.Id()) {
+             // Add the renderer combobox now so it's at the top
+             api_grid_layout->addWidget(widget);
+@@ -514,6 +525,9 @@ void ConfigureGraphics::UpdateAPILayout() {
+     const auto current_backend = GetCurrentGraphicsBackend();
+     const bool is_vulkan = current_backend == Settings::RendererBackend::Vulkan;
+     vulkan_device_widget->setVisible(is_vulkan);
++    for (auto* widget : hdr_widgets) {
++        widget->setVisible(is_vulkan);
++    }
+     if (is_vulkan && int(vulkan_device) < vulkan_device_combobox->count()) {
+         vulkan_device_combobox->setCurrentIndex(vulkan_device);
+     }
+diff --git a/src/yuzu/configuration/configure_graphics.h b/src/yuzu/configuration/configure_graphics.h
+index 9002af437b..21429eedfd 100644
+--- a/src/yuzu/configuration/configure_graphics.h
++++ b/src/yuzu/configuration/configure_graphics.h
+@@ -107,6 +107,7 @@ private:
+     QComboBox* vsync_mode_combobox;
+     QPushButton* vsync_restore_global_button;
+     QWidget* vulkan_device_widget;
++    std::vector<QWidget*> hdr_widgets;
+     QWidget* api_widget;
+     QComboBox* aspect_ratio_combobox;
+     QComboBox* resolution_combobox;
 diff --git a/src/yuzu/main_window.cpp b/src/yuzu/main_window.cpp
 index 1ae0a812e5..68376e608d 100644
 --- a/src/yuzu/main_window.cpp
