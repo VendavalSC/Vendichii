@@ -63,7 +63,7 @@ jobs:
           test -x "$app/Contents/MacOS/lichii"
           test -x build/release/bin/eden-cli
           cp build/release/bin/eden-cli "$app/Contents/MacOS/eden-cli"
-          cp build/release/bin/nx2_switches.txt "$app/Contents/Resources/nx2_switches.txt"
+          cp dist/nx2_switches.txt "$app/Contents/Resources/nx2_switches.txt"
           cp MCP-DEBUG.md "$app/Contents/Resources/MCP-DEBUG.md"
           mkdir -p "$app/Contents/Resources/tools/nx2" "$app/Contents/Resources/docs/nx2"
           cp tools/nx2/debug_mcp.py tools/nx2/test_debug_mcp.py "$app/Contents/Resources/tools/nx2/"
