@@ -18,7 +18,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 - Based on v28 / zortos `nx2` `c2e293ec`; includes the #910 OoT texture-memo
   crash fix and the official nx2 merge set.
 - All v28 features included.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v28
 
@@ -30,7 +30,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   clip-distance race).
 - All v24 features included: native HDR,
   NVIDIA DLSS, Fritchii v4/v4.1 fixes and the full superbuild set.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v24
 
@@ -41,7 +41,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 - All v23 features included: GPU-thread poll timer, pipeline-cache filtering,
   native HDR, NVIDIA DLSS and the full
   superbuild set.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 ## v23
 
 - Smoother GPU thread scheduling: the pending-channel poll timer resets when a
@@ -51,7 +51,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 - All v22 features included: shader
   precache, split GPU thread pinning, OoT FPS Unlock, native HDR, NVIDIA DLSS,
   the Fritchii fixes and the full superbuild set.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 ## v22
 
 - Ocarina of Time's recommended preset now also disables memory-operation
@@ -65,7 +65,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   cheaper ASTC uploads (#296), stale-image upload fixes (#818/#817), Switch 2
   button icons (#691) and decoder/movie-clock fixes (#809).
 - The rest of the superbuild set is unchanged.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v21
 
@@ -85,7 +85,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   batching, mja00 work, Nolar's video/scheduler/texture-cache fixes, the
   `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets, NVIDIA DLSS on Windows,
   native HDR (opt-in) and the updater pointed at this repository.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v20
 
@@ -101,7 +101,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   batching, mja00 uniform-bank/HMMA work, Nolar's video, scheduler and
   texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets,
   NVIDIA DLSS on Windows, and an updater pointed at this repository.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v19
 
@@ -116,14 +116,14 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   page-mark batching, the mja00 uniform-bank/HMMA work, Nolar's video,
   scheduler and texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and
   `ASYNC_DISCARD` presets, and an updater pointed at this repository.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v18
 
 - Movie video now stays in sync with its audio, with late-frame dropping, movie
   pacing and faster streaming for Switch 2 titles (upstream #659).
 - Fixed an RDNA2 GPU crash caused by cooperative-matrix HMMA (upstream #657).
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v17
 
@@ -133,7 +133,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 - NVIDIA DLSS for OoT: the effects mask is now handed to Streamline in a format
   it accepts, so the glow and particle fix works. DLSS presets E and F are now
   selectable.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v16
 
@@ -143,14 +143,14 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 - Option to bypass Ocarina of Time's sharpening anti-aliasing network.
 - Fix for night-time smear and flicker from Navi's glow, fireflies and dust when
   DLSS is on.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v15
 
 - Adds NVIDIA DLSS Super Resolution for Ocarina of Time and task/mesh pipelines
   through compute on GPUs without `VK_EXT_mesh_shader`.
 - PGO builds verified and kept for Windows and Linux.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v14
 
@@ -159,12 +159,12 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 - Cooperative-matrix HMMA for OoT (+12–24% standing/walking, RDNA4 41 → 60 fps),
   float16 support for LSFG frame generation, Dynamic FPS down to 10 fps, a 50 µs
   GPU-thread poll, texture-cache out-of-memory handling and framebuffer limits.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v13
 
 - In-place AppImage updates with one rollback copy.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v12
 
@@ -172,38 +172,38 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   releases.
 - Added device-loss diagnostics and frame-generation status in the status bar.
 - Windows packages use bundled static FFmpeg.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v11
 
 - Upstream fixes for OoT far-field sky haze, NaN handling, QMD release formats,
   microphone capture and NUP metadata.
 - Windows packages use bundled static FFmpeg.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## v10
 
 - 43 upstream commits: 64-byte usage tracking, 32-bit global atomics, dynamic
   per-tap offsets, macro hand-back, Turing macro RAM, gathered-buffer lifetime,
   address-wrap rejection and game-list crash fixes.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## 261106-v9
 
 - Reviewed candidate fixes: NaN-defined min/max, QMD release formats,
   framebuffer limits, texture-cache OOM retries and mesh-shader logging.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## 261106-v8
 
 - Upstream OoT split-deadlock fix, GPU back bookkeeping, quad index growth,
   paired cbuf pointer and CPU-write download guard.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## 261106-v7
 
 - Opt-in desktop compatibility reports and Linux AppImage switch discovery.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## 261106-v6
 
@@ -212,22 +212,22 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   shaders). Session-only; saved preferences are unchanged. New desktop configs
   receive those values as first-run defaults.
 - GPU thread wake from the sharkiix work.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## 261106-v4
 
 - Async native draw discard, worker lost-wake fix, misaligned SSBO and compute
   write ordering fixes.
 - GPU thread wake: queued commands wake the GPU thread immediately.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## 261106-v3
 
 - Async native discard stops draws stalling on unbuilt pipelines.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 
 ## 261106-v2
 
 - First release with the full curated superbuild fix set: Bananza page-mark
   batching, OoT reticle, GPU split, Frizti ports, mja00 fixes and AMD fixes.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
