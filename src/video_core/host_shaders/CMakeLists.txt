@@ -295,6 +295,70 @@ foreach(VARIANT IN ITEMS ${FSR3_VARIANTS})
     set(SHADER_HEADERS ${SHADER_HEADERS} ${FSR3_HEADER_FILE})
 endforeach()
 
+# AMD FidelityFX FSR 3 frame generation (externals/FidelityFX-SDK, unmodified): the SDK's Vulkan
+# frame interpolation and optical flow pass files, with standard depth and render-size motion vectors.
+set(FFX_FG_PASS_DIR ${CMAKE_SOURCE_DIR}/externals/FidelityFX-SDK/shaders)
+file(GLOB FFX_FG_GPU_FILES ${FSR3_GPU_DIR}/*.h ${FSR3_GPU_DIR}/spd/*.h
+     ${FSR3_GPU_DIR}/frameinterpolation/*.h ${FSR3_GPU_DIR}/opticalflow/*.h)
+set(FFX_FG_FLAGS
+    -DFFX_GPU=1
+    -DFFX_GLSL=1
+    -DFFX_FRAMEINTERPOLATION_OPTION_INVERTED_DEPTH=0
+    -DFFX_FRAMEINTERPOLATION_OPTION_LOW_RES_MOTION_VECTORS=1
+    -DFFX_FRAMEINTERPOLATION_OPTION_JITTERED_MOTION_VECTORS=0
+)
+set(FFX_FG_VARIANTS
+    "fi_reconstruct_and_dilate|frameinterpolation/ffx_frameinterpolation_reconstruct_and_dilate|none"
+    "fi_setup|frameinterpolation/ffx_frameinterpolation_setup|none"
+    "fi_reconstruct_previous_depth|frameinterpolation/ffx_frameinterpolation_reconstruct_previous_depth|none"
+    "fi_game_motion_vector_field|frameinterpolation/ffx_frameinterpolation_game_motion_vector_field|none"
+    "fi_game_vector_field_inpainting_pyramid|frameinterpolation/ffx_frameinterpolation_compute_game_vector_field_inpainting_pyramid|none"
+    "fi_game_vector_field_inpainting_pyramid_nowave|frameinterpolation/ffx_frameinterpolation_compute_game_vector_field_inpainting_pyramid|-DFFX_SPD_NO_WAVE_OPERATIONS=1"
+    "fi_optical_flow_vector_field|frameinterpolation/ffx_frameinterpolation_optical_flow_vector_field|none"
+    "fi_disocclusion_mask|frameinterpolation/ffx_frameinterpolation_disocclusion_mask|none"
+    "fi_interpolation|frameinterpolation/ffx_frameinterpolation|none"
+    "fi_inpainting_pyramid|frameinterpolation/ffx_frameinterpolation_compute_inpainting_pyramid|none"
+    "fi_inpainting_pyramid_nowave|frameinterpolation/ffx_frameinterpolation_compute_inpainting_pyramid|-DFFX_SPD_NO_WAVE_OPERATIONS=1"
+    "fi_inpainting|frameinterpolation/ffx_frameinterpolation_inpainting|none"
+    "of_prepare_luma|opticalflow/ffx_opticalflow_prepare_luma|none"
+    "of_luminance_pyramid|opticalflow/ffx_opticalflow_compute_luminance_pyramid|none"
+    "of_luminance_pyramid_nowave|opticalflow/ffx_opticalflow_compute_luminance_pyramid|-DFFX_SPD_NO_WAVE_OPERATIONS=1"
+    "of_scd_histogram|opticalflow/ffx_opticalflow_generate_scd_histogram|none"
+    "of_scd_divergence|opticalflow/ffx_opticalflow_compute_scd_divergence|none"
+    "of_search|opticalflow/ffx_opticalflow_compute_optical_flow_advanced|_v5"
+    "of_filter|opticalflow/ffx_opticalflow_filter_optical_flow|_v5"
+    "of_scale|opticalflow/ffx_opticalflow_scale_optical_flow_advanced|_v5"
+)
+foreach(VARIANT IN ITEMS ${FFX_FG_VARIANTS})
+    string(REPLACE "|" ";" VARIANT_PARTS "${VARIANT}")
+    list(GET VARIANT_PARTS 0 FFX_FG_NAME)
+    list(GET VARIANT_PARTS 1 FFX_FG_PASS)
+    list(GET VARIANT_PARTS 2 FFX_FG_EXTRA)
+    set(FFX_FG_DEFINE "")
+    set(FFX_FG_SUFFIX "")
+    if (FFX_FG_EXTRA STREQUAL "_v5")
+        set(FFX_FG_SUFFIX "_v5")
+    elseif (NOT FFX_FG_EXTRA STREQUAL "none")
+        set(FFX_FG_DEFINE ${FFX_FG_EXTRA})
+    endif()
+    set(FFX_FG_SOURCE ${FFX_FG_PASS_DIR}/${FFX_FG_PASS}_pass${FFX_FG_SUFFIX}.glsl)
+    string(TOUPPER ffx_fg_${FFX_FG_NAME}_comp_spv FFX_FG_VARIABLE_NAME)
+    set(FFX_FG_HEADER_FILE ${SHADER_DIR}/ffx_fg_${FFX_FG_NAME}_comp_spv.h)
+    add_custom_command(
+        OUTPUT
+            ${FFX_FG_HEADER_FILE}
+        COMMAND
+            ${GLSLANGVALIDATOR} -V ${QUIET_FLAG} -S comp -I"${FSR3_GPU_DIR}" ${FFX_FG_FLAGS}
+            ${FFX_FG_DEFINE} --variable-name ${FFX_FG_VARIABLE_NAME} -o ${FFX_FG_HEADER_FILE}
+            ${FFX_FG_SOURCE} --target-env ${SPIR_V_VERSION}
+        MAIN_DEPENDENCY
+            ${FFX_FG_SOURCE}
+        DEPENDS
+            ${FFX_FG_GPU_FILES}
+    )
+    set(SHADER_HEADERS ${SHADER_HEADERS} ${FFX_FG_HEADER_FILE})
+endforeach()
+
 foreach(FILEPATH IN ITEMS ${FIDELITYFX_FILES})
     get_filename_component(FILENAME ${FILEPATH} NAME)
     string(REPLACE "." "_" HEADER_NAME ${FILENAME})

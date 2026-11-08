@@ -448,7 +448,7 @@ struct Values {
                                       Specialization::Default, true, false};
 
     SwitchableSetting<FrameGenType> frame_gen_type{linkage,
-                                                   FrameGenType::Fsr3,
+                                                   FrameGenType::AmdFsr3,
                                                    "frame_gen_type",
                                                    Category::Renderer,
                                                    Specialization::Default,
