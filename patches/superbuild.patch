@@ -9,6 +9,33 @@ index 99172a7f34..06f1952ee9 100644
 +patches/*.patch -text
 +tools/superbuild/*.sh text eol=lf
 +SUPERBUILD.md text eol=lf
+diff --git a/.github/workflows/release-binaries.yml b/.github/workflows/release-binaries.yml
+index d7750e2e5d..23d8bc5c88 100644
+--- a/.github/workflows/release-binaries.yml
++++ b/.github/workflows/release-binaries.yml
+@@ -7,6 +7,14 @@ on:
+         description: Publish the binaries as a GitHub release
+         type: boolean
+         default: true
++      windows_cpu_preset:
++        description: CPU the Windows builds target (YUZU_BUILD_PRESET); zen3 runs only on Zen 3 or newer
++        type: choice
++        options:
++          - custom
++          - v3
++          - zen3
++        default: custom
+   push:
+     branches:
+       - nx2-experimental
+@@ -318,6 +326,7 @@ jobs:
+             -DENABLE_UPDATE_CHECKER=ON \
+             -DLICHII_BUILD_TAG=build-${{ github.run_number }} \
+             -DLICHII_BUILD_PLATFORM=${{ matrix.platform }} \
++            -DYUZU_BUILD_PRESET=${{ inputs.windows_cpu_preset || 'custom' }} \
+             -DUSE_DISCORD_PRESENCE=OFF \
+             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
 diff --git a/.gitignore b/.gitignore
 index 873b99bec2..258906d26f 100644
 --- a/.gitignore
@@ -26,10 +53,10 @@ index 873b99bec2..258906d26f 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..c9dba01d83 100644
+index bc40878ce6..b4f296dd3d 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,168 @@
+@@ -1,11 +1,175 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -38,9 +65,17 @@ index bc40878ce6..c9dba01d83 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v21
++## v22
  
 -## [0.1.0]
++- Ocarina of Time's recommended preset now also disables memory-operation
++  synchronization and turns on NVIDIA DLSS where available (FSR 3.1 fallback).
++- New Zen 3 build target (`YUZU_BUILD_PRESET=zen3`) for Ryzen 5000-class CPUs.
++- The rest of the superbuild set is unchanged.
++- Windows and Linux, standard and PGO.
++## v21
+ 
+-- Initial release candidate
 +- Ocarina of Time's water no longer flickers at Zora's River and other water; a
 +  storage-buffer address mistaken for a texture handle now binds no texture.
 +- Upload staging buffers are kept and reused instead of being freed every 64
@@ -58,8 +93,7 @@ index bc40878ce6..c9dba01d83 100644
 +  `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets, NVIDIA DLSS on Windows,
 +  native HDR (opt-in) and the updater pointed at this repository.
 +- Windows and Linux, standard and PGO.
- 
--- Initial release candidate
++
 +## v20
 +
 +- **Native HDR output (opt-in).** Enable HDR in Graphics settings on a compatible
@@ -204,6 +238,46 @@ index bc40878ce6..c9dba01d83 100644
 +- First release with the full curated superbuild fix set: Bananza page-mark
 +  batching, OoT reticle, GPU split, Frizti ports, mja00 fixes and AMD fixes.
 +- Windows and Linux, standard and PGO.
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b254665981..f4b7fc7f5f 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -348,7 +348,7 @@ if (CXX_GCC OR CXX_CLANG)
+         # See https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
+         # Generic supports Pentium Pro instruction set and above
+         # TODO: if a value is unknown, pass that as march and mtune
+-        set(YUZU_BUILD_PRESET "custom" CACHE STRING "Build preset to use. One of: custom, generic, v3, zen2, zen4, native")
++        set(YUZU_BUILD_PRESET "custom" CACHE STRING "Build preset to use. One of: custom, generic, v3, zen2, zen3, zen4, native")
+ 
+         if (${YUZU_BUILD_PRESET} STREQUAL "generic")
+             set(march x86-64)
+@@ -359,6 +359,9 @@ if (CXX_GCC OR CXX_CLANG)
+         elseif (${YUZU_BUILD_PRESET} STREQUAL "zen2")
+             set(march znver2)
+             set(mtune znver2)
++        elseif (${YUZU_BUILD_PRESET} STREQUAL "zen3")
++            set(march znver3)
++            set(mtune znver3)
+         elseif (${YUZU_BUILD_PRESET} STREQUAL "zen4")
+             set(march znver4)
+             set(mtune znver4)
+@@ -382,8 +385,14 @@ if (CXX_GCC OR CXX_CLANG)
+     endif()
+ 
+     if (DEFINED march AND DEFINED mtune)
+-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=${march} -mtune=${mtune}")
+-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=${march} -mtune=${mtune}")
++        # clang-cl ignores GCC-style -march/-mtune unless passed through /clang:
++        if (MSVC)
++            set(arch_flags "/clang:-march=${march} /clang:-mtune=${mtune}")
++        else()
++            set(arch_flags "-march=${march} -mtune=${mtune}")
++        endif()
++        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${arch_flags}")
++        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${arch_flags}")
+     endif()
+ endif()
+ 
 diff --git a/CMakeModules/GenerateSCMRev.cmake b/CMakeModules/GenerateSCMRev.cmake
 index bdd14dbf42..011ca069b6 100644
 --- a/CMakeModules/GenerateSCMRev.cmake
@@ -318,10 +392,10 @@ index 0caad38d8b..e2898f2f77 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..15c3cf0e35
+index 0000000000..5362c25541
 --- /dev/null
 +++ b/SUPERBUILD.md
-@@ -0,0 +1,196 @@
+@@ -0,0 +1,199 @@
 +# Lichii Superbuild (unofficial)
 +
 +## Credits
@@ -391,6 +465,9 @@ index 0000000000..15c3cf0e35
 +- Native HDR presentation from clshortfuse is carried locally: PR #180 here
 +  (a port of Djihads80/Eglantine#605). Both upstream PRs are still open. HDR is
 +  opt-in and off by default. If either lands, rebase and drop our copy.
++- OoT Zen 3 preset and build target from PR #2 (EvertonCeciliano) is carried
++  locally: the recommended OoT preset disables memory-operation syncs and
++  enables NVIDIA DLSS where available, and `YUZU_BUILD_PRESET=zen3` is accepted.
 +- License: GPL-3.0-or-later, inherited from Lichii/Eden/yuzu
 +
 +## Branches
@@ -563,7 +640,7 @@ index 4928eb47ff..3be40fe991 100644
  
  Enhancements aimed at removing jagged lines/sharp edges and/or masking artifacts.
 diff --git a/src/common/game_presets.h b/src/common/game_presets.h
-index 83dd4d3c3f..1379e76568 100644
+index 83dd4d3c3f..7602618e87 100644
 --- a/src/common/game_presets.h
 +++ b/src/common/game_presets.h
 @@ -7,6 +7,7 @@
@@ -574,7 +651,7 @@ index 83dd4d3c3f..1379e76568 100644
  
  inline void SetMarioKartWorldRecommendedSettings(Values& settings, bool global) {
      const auto session = [global](auto& setting, auto value) {
-@@ -34,4 +35,24 @@ inline bool ApplyMarioKartWorldPreset(Values& settings, u64 program_id, bool acc
+@@ -34,4 +35,28 @@ inline bool ApplyMarioKartWorldPreset(Values& settings, u64 program_id, bool acc
      return true;
  }
  
@@ -588,6 +665,10 @@ index 83dd4d3c3f..1379e76568 100644
 +    session(settings.nvdec_emulation, NvdecEmulation::Gpu);
 +    session(settings.async_presentation, true);
 +    session(settings.use_asynchronous_shaders, true);
++    // A fence per synced command list stalls the GPU thread and OoT renders correctly without it.
++    session(settings.sync_memory_operations, false);
++    // Real DLSS on RTX cards; without Streamline's files or an RTX GPU this falls back to FSR 3.1.
++    session(settings.nvidia_dlss, true);
 +}
 +
 +inline bool ApplyOcarinaOfTimePreset(Values& settings, u64 program_id, bool accepted) {
@@ -1003,10 +1084,10 @@ index df6b019e54..c92ebab18f 100644
      video_core/pending_maps.cpp
      video_core/maxwell_fast_method.cpp
 diff --git a/src/tests/common/game_presets.cpp b/src/tests/common/game_presets.cpp
-index 481f5c5e1d..48dd887b97 100644
+index 481f5c5e1d..783444313b 100644
 --- a/src/tests/common/game_presets.cpp
 +++ b/src/tests/common/game_presets.cpp
-@@ -109,3 +109,25 @@ TEST_CASE("Declining the MKW preset preserves global and per-game preferences",
+@@ -109,3 +109,29 @@ TEST_CASE("Declining the MKW preset preserves global and per-game preferences",
          CHECK(settings->resolution_setup.UsingGlobal() == !per_game);
      }
  }
@@ -1018,6 +1099,8 @@ index 481f5c5e1d..48dd887b97 100644
 +    settings->nvdec_emulation.SetValue(Settings::NvdecEmulation::Cpu);
 +    settings->async_presentation.SetValue(false);
 +    settings->use_asynchronous_shaders.SetValue(false);
++    settings->sync_memory_operations.SetValue(true);
++    settings->nvidia_dlss.SetValue(false);
 +
 +    CHECK_FALSE(
 +        Settings::ApplyOcarinaOfTimePreset(*settings, Settings::OcarinaOfTimeProgramId, false));
@@ -1031,6 +1114,8 @@ index 481f5c5e1d..48dd887b97 100644
 +    CHECK(settings->nvdec_emulation.GetValue() == Settings::NvdecEmulation::Gpu);
 +    CHECK(settings->async_presentation.GetValue());
 +    CHECK(settings->use_asynchronous_shaders.GetValue());
++    CHECK_FALSE(settings->sync_memory_operations.GetValue());
++    CHECK(settings->nvidia_dlss.GetValue());
 +}
 diff --git a/src/tests/core/nx2_image_layout.cpp b/src/tests/core/nx2_image_layout.cpp
 index 66528c1ebe..9e81a4cc4c 100644
@@ -3095,10 +3180,10 @@ index 9002af437b..21429eedfd 100644
      QComboBox* aspect_ratio_combobox;
      QComboBox* resolution_combobox;
 diff --git a/src/yuzu/main_window.cpp b/src/yuzu/main_window.cpp
-index 1ae0a812e5..68376e608d 100644
+index 1ae0a812e5..fcd57711bf 100644
 --- a/src/yuzu/main_window.cpp
 +++ b/src/yuzu/main_window.cpp
-@@ -2091,6 +2091,25 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
+@@ -2091,6 +2091,26 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
          Settings::UpdateGPUAccuracy();
          LOG_INFO(Config, "Applied recommended MKW settings after per-game configuration");
      }
@@ -3109,8 +3194,9 @@ index 1ae0a812e5..68376e608d 100644
 +            QMessageBox::question(
 +                this, tr("Recommended Ocarina of Time settings"),
 +                tr("Use the recommended performance settings for Ocarina of Time?\n\n"
-+                   "FSR3 scaling, GPU accuracy Low, GPU NVDEC, asynchronous presentation and "
-+                   "asynchronous shaders.\n\n"
++                   "FSR3 scaling, GPU accuracy Low, GPU NVDEC, asynchronous presentation, "
++                   "asynchronous shaders, NVIDIA DLSS where available and no memory operation "
++                   "syncs.\n\n"
 +                   "They apply until Lichii is closed. Your saved settings are not changed."),
 +                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes;
 +        LOG_INFO(Config, "OoT recommended settings accepted: {}", use_recommended_oot_settings);

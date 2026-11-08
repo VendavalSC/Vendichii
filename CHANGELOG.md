@@ -2,6 +2,13 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v22
+
+- Ocarina of Time's recommended preset now also disables memory-operation
+  synchronization and turns on NVIDIA DLSS where available (FSR 3.1 fallback).
+- New Zen 3 build target (`YUZU_BUILD_PRESET=zen3`) for Ryzen 5000-class CPUs.
+- The rest of the superbuild set is unchanged.
+- Windows and Linux, standard and PGO.
 ## v21
 
 - Ocarina of Time's water no longer flickers at Zora's River and other water; a

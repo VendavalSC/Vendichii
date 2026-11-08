@@ -67,6 +67,9 @@ a stock build as fallback.
 - Native HDR presentation from clshortfuse is carried locally: PR #180 here
   (a port of Djihads80/Eglantine#605). Both upstream PRs are still open. HDR is
   opt-in and off by default. If either lands, rebase and drop our copy.
+- OoT Zen 3 preset and build target from PR #2 (EvertonCeciliano) is carried
+  locally: the recommended OoT preset disables memory-operation syncs and
+  enables NVIDIA DLSS where available, and `YUZU_BUILD_PRESET=zen3` is accepted.
 - License: GPL-3.0-or-later, inherited from Lichii/Eden/yuzu
 
 ## Branches
