@@ -2,6 +2,15 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v30
+
+- Based on zortos `nx2` `1c25fbdf`, including #921 (fast-draw and texture-memo
+  paths now match a full resolve, closing the remaining #858 crash class) and
+  #912 (dav1d keeps its default thread count).
+- Includes #874: fence-flagged payload releases stay synchronized at low
+  accuracy/Default fences, restoring OoT performance after #337.
+- Includes the #910 OoT texture-memo crash fix and the full v29 feature set.
+- Windows and Linux, standard and PGO.
 ## v29
 
 - Adds #874: fence-flagged payload releases stay synchronized at low

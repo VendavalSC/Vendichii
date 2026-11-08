@@ -17,9 +17,9 @@
 
 # Lichii
 
-> ## ✅ v29 recommended
+> ## ✅ v30 recommended
 >
-> v29 includes the #874 payload-release fix and the #910 Ocarina of Time texture-memo crash fix, based on zortos `nx2` `c2e293ec`. v28 and v24 remain available as fallbacks.
+> v30 includes the #874 payload-release fix and the #910/#921 Ocarina of Time crash fixes, based on zortos `nx2` `1c25fbdf`. v29, v28 and v24 remain available as fallbacks.
 
 > **Unofficial superbuild fork.** This repository is not official Lichii and is
 > not affiliated with zortos293. It carries a curated set of performance and
