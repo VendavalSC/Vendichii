@@ -6,92 +6,49 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 -->
 
-<p align="center">
-  <img src="dist/branding/lichii_icon_with_logo.png" alt="Lichii" width="600">
-</p>
+# Vendichii
 
-# Lichii
+Vendichii es un fork personal de [Lichii](https://github.com/zortos293/Lichii), el emulador experimental de Nintendo Switch y Switch 2, centrado en jugar **The Legend of Zelda: Ocarina of Time** (Switch 2) a 60 fps estables y con generación de fotogramas.
 
-Lichii is an experimental, open-source Nintendo Switch and Switch 2 emulator written in C++. It builds on Eglantine, Eden, yuzu and Sudachi, preserving their contributions while developing this fork's game compatibility and renderer fixes.
+No es una versión oficial de Lichii ni de los proyectos de los que deriva, y no está afiliado a Nintendo.
 
-This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
+## Descarga
 
-Visit the [official Lichii website](https://lichii.zortos.me) to find games and compare community compatibility reports.
+Las builds están en [Releases](https://github.com/VendavalSC/Vendichii/releases). Descomprime el zip entero y ejecuta **lichii.exe**.
 
-## Downloads and setup
+- Windows x64 con una GPU Vulkan 1.3.
+- Microsoft Visual C++ Redistributable 2015-2022 (x64).
+- Juegos, claves y firmware no están incluidos: usa solo los que hayas obtenido legalmente.
 
-Published builds belong on this fork's [releases page](https://github.com/zortos293/Eglantine/releases). The repository still uses its historical Eglantine name; the desktop application is now Lichii.
+Vendichii usa las mismas carpetas de datos que Lichii/Eden (`%APPDATA%\eden`), así que tus partidas y ajustes se mantienen.
 
-On Windows, extract the entire build archive and run **lichii.exe**. Only use games and system files you have legally obtained. Games, keys and firmware are not included.
+## Qué tiene
 
-### Existing saves and settings
+Encima de Lichii (build 117):
 
-The rebrand intentionally retains the existing Eden/Eglantine data directories and configuration keys. It does not move or delete saves, settings or shader caches. Back up your saves before testing experimental builds.
+- **Generación de fotogramas AMD FSR 3**: la interpolación y el flujo óptico oficiales de AMD (FidelityFX SDK v1.1.4, shaders sin modificar), sin Lossless Scaling ni nada externo. Se activa en *Configurar > Gráficos > Frame generation > AMD FSR 3 Frame Generation*. La barra de estado muestra `Display: X FPS` con los fotogramas generados.
+- **PGO propio**: compilado con clang, ThinLTO y un perfil grabado jugando a Ocarina. En la ciudadela de Hyrule pasó de 35 a 45-50 fps.
+- **zstd nativo**: la descompresión de datos de Ocarina corre en código nativo en vez de emulado.
+- **Dynamic FPS** de Dark (Eglantine) integrado, y los hilos de la GPU fijados a sus propios núcleos.
+- Herramientas de benchmark y perfilado para Windows en [`tools/windows`](tools/windows).
 
-## Compatibility and issue reports
+### Ajustes recomendados para Ocarina
 
-Compatibility and performance vary by game, hardware and driver. Rendering errors, stutters and crashes remain possible. Passing automated tests does not establish that a game renders correctly, and this project makes no universal frame-rate guarantee.
+- CPU emulada: **Normal** (Boost acelera el juego).
+- Reactive flushing: **activado** (desactivado da pantalla blanca).
 
-Browse [community compatibility reports](https://lichii.zortos.me/reports) for results with each player's build and setup.
+## Compilar
 
-Desktop reporting requires a build containing [PR #303](https://github.com/zortos293/Lichii/pull/303) and is not available in build 88. In builds that include it, play and stop a Switch 2 game, then right-click that game and choose **Submit compatibility report**. Only the latest session in the current Lichii process is eligible.
+Con Visual Studio 2022+, el Vulkan SDK y LLVM instalados:
 
-Confirm the matching website catalog entry and review the editable machine, game, setup, and enabled add-on details prefilled where available. Check the public preview and give explicit consent before submitting. Nothing uploads automatically, and the native v1 reporter does not read or upload logs or files.
-
-When [reporting an issue](https://github.com/zortos293/Eglantine/issues), include:
-
-- The exact build, game version, CPU, GPU and driver version.
-- Relevant settings and steps to reproduce the problem.
-- A screenshot and the log from the affected session, after checking it for personal information.
-
-Do not upload game files, keys, firmware or private account information.
-
-## Building and contributing
-
-See the [build guide](docs/Build.md), [user documentation](docs/user/README.md) and [coding guidelines](docs/Coding.md). Some inherited documentation and internal build target names still use upstream names. The GUI build target remains `yuzu`; its output is `lichii.exe` on Windows and `lichii` on other desktop platforms.
-
-Keep changes focused and distinguish code-level checks from actual gameplay testing.
-
-## Artwork
-Art created by YOB (yobslab)
-The supplied Lichii logo, icon and library artwork are in [dist/branding](dist/branding). Windows, Linux and macOS icon resources are generated from that artwork by [Generate-LichiiIcons.ps1](tools/Generate-LichiiIcons.ps1).
-
-## Support Lichii
-
-Lichii is free and stays free. If you want to help, you can donate in crypto. Donations help pay for the AI tools and build machines used to develop this open-source project faster.
-
-**Solana (SOL)**
-```text
-JepEjfyWjGjhJvHSrqj52KtLjcbbbmUh1iGqerYBF4w
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\windows\build-release.ps1 -Clang
 ```
 
-**Ethereum (ETH)**
-```text
-0x055ABa1b80Bc35C836Ce7E9F47c2b3d6C75b5534
-```
+El ejecutable queda en `build\clang\bin\lichii.exe`. Para regrabar el perfil PGO: `build-release.ps1 -PgoGenerate`, jugar con `tools\windows\pgo-run.ps1`, cerrar, `pgo-run.ps1 -Merge` y volver a compilar con `-Clang`. Más detalles en la [guía de compilación](docs/Build.md).
 
-**Bitcoin (BTC)**
-```text
-bc1qcvxdpf4qvdhqp8ee4s355cjmxrzsphsdwpl8w4
-```
+## Créditos y licencia
 
-**BNB Smart Chain (BNB)**
-```text
-0x055ABa1b80Bc35C836Ce7E9F47c2b3d6C75b5534
-```
+Vendichii se basa en el trabajo de **Lichii** (zortos293), **Frizti**, **Eglantine** (Djihads80, Camille LaVey), **Eden**, **yuzu** y **Sudachi**, y de todos sus colaboradores. Dynamic FPS es de Dark (Eglantine). FSR 3 es de AMD (licencia MIT). Se conservan los avisos de copyright originales y las licencias de terceros.
 
-**Polygon**
-```text
-0x055ABa1b80Bc35C836Ce7E9F47c2b3d6C75b5534
-```
-
-Send each coin on its matching network. Coins sent on the wrong network can't be recovered.
-
-> [!NOTE]
-> Donations are voluntary gifts and are non-refundable. A donation does not buy any product, service, perk, early access, exclusive build, priority support or say in the project. Every release stays free and public for everyone.
-
-## Credits and license
-
-Lichii inherits the work of the Eglantine, Eden, yuzu and Sudachi projects and their contributors, including Eglantine's original developer Camille LaVey. Original copyright notices and third-party licenses are retained.
-
-See [LICENSE.txt](LICENSE.txt) and the source files for applicable license terms.
+Licencia GPL-3.0: ver [LICENSE.txt](LICENSE.txt).
