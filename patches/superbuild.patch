@@ -392,10 +392,10 @@ index 0caad38d8b..e2898f2f77 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..5362c25541
+index 0000000000..979ddd8649
 --- /dev/null
 +++ b/SUPERBUILD.md
-@@ -0,0 +1,199 @@
+@@ -0,0 +1,202 @@
 +# Lichii Superbuild (unofficial)
 +
 +## Credits
@@ -423,7 +423,7 @@ index 0000000000..5362c25541
 +
 +- Upstream: `zortos293/Lichii`
 +- Branch: `nx2`
-+- Base commit: `794602bfbd012ac59dc1c8a1c9ceb8e5ddc99a3b` (2026-11-08).
++- Base commit: `3099486e5b72c6db4520db26af7c2902277a8522` (2026-11-08).
 +  The grass/foliage fix is now upstream as #551, so the 14-commit
 +  `capy/oot-hyrule-grass-fix` series is no longer carried.
 +- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -455,7 +455,10 @@ index 0000000000..5362c25541
 +  version), #575 (host mip chains), #533/#611 (texture invalidation),
 +  #498/#610 (TLD4.F16 gathers), #479/#609 (DMA fence thread) and #778
 +  (Fritchii v4/v4.1: OoT water flicker, staging-buffer reuse, per-method
-+  switch reads). Those are not re-applied here.
++  switch reads), plus #781 (shader precache), #769 (split GPU thread
++  pinning), #655 (OoT FPS unlock and frame-rate limit), #752 (channel wait),
++  #337 (fence-flagged reports), #264 (buffer read traps), #690 (MKW water)
++  and #699 (deferred clear). Those are not re-applied here.
 +- PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
 +  and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
 +  locally. PR #635 is still open upstream; PR #644 (the R16F follow-up) was
@@ -592,7 +595,7 @@ index 0000000000..5362c25541
 +`superbuild`.
 +
 +```bash
-+git checkout 794602bf
++git checkout 3099486e
 +git apply patches/superbuild.patch
 +```
 diff --git a/dist/nx2_switches.txt b/dist/nx2_switches.txt
@@ -735,7 +738,7 @@ index 140225da07..cc24eacf2f 100644
      }
      return {};
 diff --git a/src/common/settings.h b/src/common/settings.h
-index d672eab8cd..a9d6a78b6b 100644
+index 06575ad4ce..2c5371c223 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -339,6 +339,11 @@ struct Values {
@@ -794,7 +797,7 @@ index a38c8be777..a4f8a53c72 100644
  };
  
 diff --git a/src/core/hle/service/nx2_gsv.h b/src/core/hle/service/nx2_gsv.h
-index f968e2f6ec..8142ef04ac 100644
+index ed13092850..8984217f7a 100644
 --- a/src/core/hle/service/nx2_gsv.h
 +++ b/src/core/hle/service/nx2_gsv.h
 @@ -80,6 +80,21 @@
@@ -819,8 +822,8 @@ index f968e2f6ec..8142ef04ac 100644
  // Creates a session served by `iface` and returns its client end. Unlike PushIpcInterface this
  // works from a domain too, for callers that want a raw session handle.
  template <class T>
-@@ -1523,6 +1538,8 @@ struct Nx2NativeObjects {
-         bool gpu_read{};
+@@ -1525,6 +1540,8 @@ struct Nx2NativeObjects {
+         std::shared_ptr<std::mutex> decoder_mutex;
          u32 gpu_maps{};     // outstanding 426 maps
          bool mapped_here{}; // 426 added its GPU mapping (no other mapping covered it)
 +        Tegra::ColorSpace color_space{Tegra::ColorSpace::RGB709};
@@ -828,7 +831,7 @@ index f968e2f6ec..8142ef04ac 100644
      };
      std::mutex mutex;
      std::map<u32, Memory> memories;
-@@ -1894,6 +1911,7 @@ private:
+@@ -1938,6 +1955,7 @@ private:
      // Eden's GPU thread has processed the frame. Otherwise the game laps the GPU thread and
      // rewrites command memory it hasn't read yet.
      u32 m_wait_timeouts{};
@@ -836,7 +839,7 @@ index f968e2f6ec..8142ef04ac 100644
      struct PresentStats {
          long long frame_us{}, fence_us{}, composite_us{}, pace_us{}, max_fence_us{};
          long long max_frame_us{}, hitches{};
-@@ -1955,9 +1973,13 @@ private:
+@@ -1999,9 +2017,13 @@ private:
          if (mkw_dynamic) {
              swap_interval = 1;
          }
@@ -851,7 +854,7 @@ index f968e2f6ec..8142ef04ac 100644
          const u32 refresh_rate = (timing & 0xffff) >= 30 && (timing & 0xffff) <= 240 ? timing & 0xffff : 60;
          if (trace) {
              m_frame_trace.interval = swap_interval;
-@@ -2075,7 +2097,7 @@ private:
+@@ -2125,7 +2147,7 @@ private:
  
      // Shows a presented native image: word 5 is the image id, ~word 22 / word 24 the GPU fence
      // (syncpoint, value) to wait for (layout from changes.patch). The image is a block-linear
@@ -860,7 +863,7 @@ index f968e2f6ec..8142ef04ac 100644
      // shown_size: the present's word 7, ((height - 1) << 16) | (width - 1) of the area the game drew
      // into from the image's top-left corner (0 when it gives none).
      void Composite(u32 image_id, u32 fence_id, u32 fence_value, u32 shown_size) {
-@@ -2084,7 +2106,9 @@ private:
+@@ -2134,7 +2156,9 @@ private:
          u64 parent_offset{};
          std::optional<Nx2NativeObjects::VideoTrace> video_trace;
          Nx2ImageLayout layout{};
@@ -871,7 +874,7 @@ index f968e2f6ec..8142ef04ac 100644
          {
              std::scoped_lock lk{m_objects->mutex};
              const auto image = m_objects->images.find(image_id);
-@@ -2099,7 +2123,9 @@ private:
+@@ -2149,7 +2173,9 @@ private:
              parent = memory->second.parent;
              parent_offset = memory->second.parent_offset + image->second.offset;
              layout = Nx2CalculateImageLayout(image->second.preference.data());
@@ -882,7 +885,7 @@ index f968e2f6ec..8142ef04ac 100644
              if (Nx2VideoTraceEnabled()) {
                  video_trace = m_objects->last_video_write;
              }
-@@ -2183,14 +2209,19 @@ private:
+@@ -2233,14 +2259,19 @@ private:
              .offset = 0,
              .width = layout.width,
              .height = layout.height,
@@ -906,7 +909,7 @@ index f968e2f6ec..8142ef04ac 100644
          }};
          std::vector<Nvidia::NvFence> fences;
          if (fence_id < 192) {
-@@ -2297,22 +2328,29 @@ private:
+@@ -2347,22 +2378,29 @@ private:
          TipcReplyWords(ctx, {60, 0});
      }
  
@@ -948,7 +951,7 @@ index f968e2f6ec..8142ef04ac 100644
      }
  
      // 212(u64 layer): u64 bits of the layer's buffer slots that are ready. The client polls it once
-@@ -3175,6 +3213,7 @@ private:
+@@ -3222,6 +3260,7 @@ private:
              }
              pictures.clear();
              decoder->Decode(input.data, input.pts, pictures);
@@ -956,7 +959,7 @@ index f968e2f6ec..8142ef04ac 100644
              if (input.end) {
                  decoder->Drain(pictures);
              }
-@@ -3909,6 +3948,22 @@ private:
+@@ -3974,6 +4013,22 @@ private:
          image.memory = w[19];
          std::copy_n(w + 2, image.preference.size(), image.preference.begin());
          image.size = Nx2CalculateImageLayout(w + 2).size;
@@ -1044,7 +1047,7 @@ index 94ee0b33a6..c0a57a100a 100644
      }
      return number;
 diff --git a/src/qt_common/config/shared_translation.cpp b/src/qt_common/config/shared_translation.cpp
-index 2f76f716cf..395f2e9639 100644
+index 4ba0937a65..b5f4d20099 100644
 --- a/src/qt_common/config/shared_translation.cpp
 +++ b/src/qt_common/config/shared_translation.cpp
 @@ -142,6 +142,23 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
@@ -1072,7 +1075,7 @@ index 2f76f716cf..395f2e9639 100644
             tr("Changes the output graphics API.\nVulkan is recommended."));
      INSERT(Settings, vulkan_device, tr("Device:"),
 diff --git a/src/tests/CMakeLists.txt b/src/tests/CMakeLists.txt
-index df6b019e54..c92ebab18f 100644
+index 4bc4b48fa0..72b17068dc 100644
 --- a/src/tests/CMakeLists.txt
 +++ b/src/tests/CMakeLists.txt
 @@ -78,6 +78,7 @@ add_executable(tests
@@ -1274,10 +1277,10 @@ index 0000000000..45c283667c
 +    }
 +}
 diff --git a/src/video_core/CMakeLists.txt b/src/video_core/CMakeLists.txt
-index 816500db62..f4f5a07e3b 100644
+index 77afc5d80e..61c976d66f 100644
 --- a/src/video_core/CMakeLists.txt
 +++ b/src/video_core/CMakeLists.txt
-@@ -541,7 +541,7 @@ endif()
+@@ -550,7 +550,7 @@ endif()
  # setting is on. Only Streamline's MIT-licensed headers are compiled in and nothing of NVIDIA's is
  # linked or copied: sl.interposer.dll and the DLSS plugins are loaded at run time from the user's PC.
  cmake_dependent_option(ENABLE_NVIDIA_DLSS "Enable NVIDIA DLSS through NVIDIA Streamline" ON
@@ -1287,7 +1290,7 @@ index 816500db62..f4f5a07e3b 100644
      "NVIDIA Streamline SDK directory for its headers (empty: download them)")
  if (ENABLE_NVIDIA_DLSS)
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index bf5aaabbba..bd4e4df351 100644
+index 65f8f9d558..a0e3d4bd6d 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
 @@ -21,6 +21,7 @@
@@ -1373,10 +1376,10 @@ index 55988006d7..e943937209 100644
      void OnCommandListEnd();
  
 diff --git a/src/video_core/gpu_split.cpp b/src/video_core/gpu_split.cpp
-index c13781131a..e154aa434d 100644
+index 54374d9508..2abe3ad498 100644
 --- a/src/video_core/gpu_split.cpp
 +++ b/src/video_core/gpu_split.cpp
-@@ -201,18 +201,27 @@ void GpuSplit::Publish() {
+@@ -202,18 +202,27 @@ void GpuSplit::Publish() {
  
  void GpuSplit::Drain(DrainSite site) {
      consumed_cache = consumed.load(std::memory_order_acquire);
@@ -1408,7 +1411,7 @@ index c13781131a..e154aa434d 100644
          }
          Backoff(spins, write_position);
      }
-@@ -432,9 +441,16 @@ void GpuSplit::BackLoop(std::stop_token stop_token) {
+@@ -433,9 +442,16 @@ void GpuSplit::BackLoop(std::stop_token stop_token) {
                  Pause();
                  available = published.load(std::memory_order_acquire);
              }
@@ -1427,7 +1430,7 @@ index c13781131a..e154aa434d 100644
                  available = published.load(std::memory_order_acquire);
              }
              if (available == read_position) {
-@@ -453,6 +469,8 @@ void GpuSplit::BackLoop(std::stop_token stop_token) {
+@@ -454,6 +470,8 @@ void GpuSplit::BackLoop(std::stop_token stop_token) {
              }
          }
          u64 last_store = read_position;
@@ -1437,10 +1440,10 @@ index c13781131a..e154aa434d 100644
              const size_t index = read_position & RingMask;
              const size_t size =
 diff --git a/src/video_core/gpu_split.h b/src/video_core/gpu_split.h
-index 2e9250ff53..8b17a1b4cd 100644
+index 18e7f64a77..186f4ce2f0 100644
 --- a/src/video_core/gpu_split.h
 +++ b/src/video_core/gpu_split.h
-@@ -76,6 +76,15 @@ public:
+@@ -80,6 +80,15 @@ public:
      [[nodiscard]] static bool OnBackThread() {
          return on_back_thread;
      }
@@ -1456,7 +1459,7 @@ index 2e9250ff53..8b17a1b4cd 100644
      /// Called on the back before it sleeps waiting for work (the rasterizer submits deferred work).
      void SetIdleHook(void (*hook)(void*), void* argument) {
          idle_hook = hook;
-@@ -256,12 +265,21 @@ private:
+@@ -261,12 +270,21 @@ private:
      // Back side.
      Tegra::Engines::EngineInterface* back_engine{};
  
@@ -1595,15 +1598,14 @@ index e85e6142e7..c1a69bf197 100644
  }
  
 diff --git a/src/video_core/query_cache/query_cache.h b/src/video_core/query_cache/query_cache.h
-index efa148bf06..a71592b719 100644
+index 21bd05449c..dfd62f42f0 100644
 --- a/src/video_core/query_cache/query_cache.h
 +++ b/src/video_core/query_cache/query_cache.h
-@@ -282,10 +282,32 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -282,9 +282,32 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
      };
      u8* pointer = impl->device_memory.template GetPointer<u8>(cpu_addr);
      u8* pointer_timestamp = impl->device_memory.template GetPointer<u8>(cpu_addr + 8);
--    bool is_synced = (Settings::IsGPUFenceBehaviorDefault() ? !Settings::IsGPULevelHigh() : !Settings::IsGPUFenceBehaviorBalanced() && !Settings::IsGPUFenceBehaviorAccurate()) && is_fence;
--    std::function<void()> operation([this, is_synced, streamer, query_base = query, query_location,
+-    std::function<void()> operation([this, streamer, query_base = query, query_location,
 -                                     pointer, pointer_timestamp, cpu_addr, addr,
 -                                     asid = gpu_memory->GetID(), counter_type] {
 +    // Switch 2 titles read fence-flagged reports back from the CPU as GPU progress. Written when
@@ -1635,38 +1637,33 @@ index efa148bf06..a71592b719 100644
          if (True(query_base->flags & QueryFlagBits::IsInvalidated)) {
              if (const u64 trace = QueryTrace::Sample(QueryTrace::Event::Discard)) {
                  LOG_INFO(HW_GPU,
-@@ -294,9 +316,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -293,7 +316,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
                           trace, asid, addr, cpu_addr, static_cast<u32>(counter_type),
                           static_cast<u32>(query_base->flags));
              }
--            if (!is_synced) [[likely]] {
--                impl->pending_unregister.push_back(query_location);
--            }
+-            impl->pending_unregister.push_back(query_location);
 +            retire();
              return;
          }
          if (False(query_base->flags & QueryFlagBits::IsFinalValueSynced)) [[unlikely]] {
-@@ -309,9 +329,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -306,7 +329,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
              }
              LOG_ERROR(HW_GPU,
                        "Query report value not synchronized. Consider increasing GPU accuracy.");
--            if (!is_synced) [[likely]] {
--                impl->pending_unregister.push_back(query_location);
--            }
+-            impl->pending_unregister.push_back(query_location);
 +            retire();
              return;
          }
          query_base->value += streamer->GetAmendValue();
-@@ -334,11 +352,19 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -329,10 +352,19 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
                       wide ? query_base->value : static_cast<u32>(query_base->value),
                       static_cast<u32>(query_base->flags));
          }
--        if (!is_synced) [[likely]] {
--            impl->pending_unregister.push_back(query_location);
--        }
+-        impl->pending_unregister.push_back(query_location);
 +        retire();
      });
 -    if (is_fence) {
+-        VideoCore::g_signaling_query_report_fence = true;
 +    if (free_on_run) {
 +        {
 +            std::scoped_lock lock(cache_mutex);
@@ -1679,20 +1676,22 @@ index efa148bf06..a71592b719 100644
 +        impl->rasterizer.SignalFence([] {});
 +    } else if (is_fence) {
          impl->rasterizer.SignalFence(std::move(operation));
+         VideoCore::g_signaling_query_report_fence = false;
      } else {
-         if (!Settings::IsGPULevelHigh() && counter_type == QueryType::Payload) {
-@@ -365,7 +391,9 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -359,6 +391,12 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+         }
          impl->rasterizer.SyncOperation(std::move(operation));
      }
-     if (is_synced) {
--        streamer->Free(new_query_id);
++    if (is_synced) {
 +        if (!free_on_run) {
 +            streamer->Free(new_query_id);
 +        }
-         return;
-     }
++        return;
++    }
      auto [cont_addr, base] = gen_caching_indexing(cpu_addr);
-@@ -451,27 +479,30 @@ bool QueryCacheBase<Traits>::AccelerateHostConditionalRendering() {
+     {
+         std::scoped_lock lock(cache_mutex);
+@@ -442,27 +480,30 @@ bool QueryCacheBase<Traits>::AccelerateHostConditionalRendering() {
          }
          VAddr cpu_addr = *cpu_addr_opt;
          std::scoped_lock lock(cache_mutex);
@@ -1739,7 +1738,7 @@ index efa148bf06..a71592b719 100644
          qc_dirty |= True(query->flags & QueryFlagBits::IsHostManaged) &&
                      False(query->flags & QueryFlagBits::IsGuestSynced);
          return VideoCommon::LookupData{
-@@ -520,6 +551,7 @@ template <typename Traits>
+@@ -511,6 +552,7 @@ template <typename Traits>
  void QueryCacheBase<Traits>::CommitAsyncFlushes() {
      // Make sure to have the results synced in Host.
      NotifyWFI();
@@ -1747,7 +1746,7 @@ index efa148bf06..a71592b719 100644
  
      u64 mask{};
      {
-@@ -554,7 +586,7 @@ void QueryCacheBase<Traits>::CommitAsyncFlushes() {
+@@ -545,7 +587,7 @@ void QueryCacheBase<Traits>::CommitAsyncFlushes() {
  
  template <typename Traits>
  bool QueryCacheBase<Traits>::HasUncommittedFlushes() const {
@@ -1756,7 +1755,7 @@ index efa148bf06..a71592b719 100644
      impl->ForEachStreamer([&result](StreamerInterface* streamer) {
          result |= streamer->HasUnsyncedQueries();
          return result;
-@@ -564,7 +596,7 @@ bool QueryCacheBase<Traits>::HasUncommittedFlushes() const {
+@@ -555,7 +597,7 @@ bool QueryCacheBase<Traits>::HasUncommittedFlushes() const {
  
  template <typename Traits>
  bool QueryCacheBase<Traits>::HasPendingFenceWork() const {
@@ -1765,6 +1764,13 @@ index efa148bf06..a71592b719 100644
      impl->ForEachStreamer([&result](StreamerInterface* streamer) {
          result |= streamer->HasUnsyncedQueries() || streamer->HasPendingSync();
          return result;
+@@ -652,4 +694,4 @@ void QueryCacheBase<Traits>::RequestGuestHostSync() {
+     impl->rasterizer.ReleaseFences();
+ }
+ 
+-} // namespace VideoCommon
++} // namespace VideoCommon
+\ No newline at end of file
 diff --git a/src/video_core/query_cache/query_cache_base.h b/src/video_core/query_cache/query_cache_base.h
 index a8b6b701b9..e54d25f42c 100644
 --- a/src/video_core/query_cache/query_cache_base.h
@@ -2581,10 +2587,10 @@ index ab2b76f10f..67d31cc3a0 100644
      bool use_present_thread;
      std::atomic<std::size_t> image_count{};
 diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-index 7bbdc0c0cd..1773e89034 100644
+index 7d98fdda43..4aaee2bedc 100644
 --- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-@@ -840,6 +840,26 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func, bool is_in
+@@ -841,6 +841,26 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func, bool is_in
              }
          }
      }
@@ -2611,7 +2617,7 @@ index 7bbdc0c0cd..1773e89034 100644
  #endif
      static u32 native_capture_count{};
      if (maxwell3d->GetNativeMacroEngine().native_turing &&
-@@ -1760,13 +1780,18 @@ void RasterizerVulkan::DispatchCompute() {
+@@ -1762,13 +1782,18 @@ void RasterizerVulkan::DispatchCompute() {
  #ifdef EGLANTINE_STREAMLINE
      const bool can_replace = OcarinaDlssEnabled() && pipeline->CanReplaceOcarinaUpscale() &&
                               !indirect_address && !frame_dump.Capturing();
@@ -2631,7 +2637,7 @@ index 7bbdc0c0cd..1773e89034 100644
          if (kepler_compute->IsNativeMode()) throw Shader::RuntimeError("Native compute resources unavailable");
          return;
      }
-@@ -1852,6 +1877,15 @@ void RasterizerVulkan::DispatchCompute() {
+@@ -1869,6 +1894,15 @@ void RasterizerVulkan::DispatchCompute() {
      scheduler.RequestOutsideRenderPassOperationContext();
      record_read_barrier();
  #ifdef EGLANTINE_STREAMLINE
@@ -2647,7 +2653,7 @@ index 7bbdc0c0cd..1773e89034 100644
      const auto* const replacement =
          can_replace && !byte_addressed_shadow && TryOcarinaDlss(*pipeline, true)
              ? oot_live_dlss.get()
-@@ -1890,7 +1924,7 @@ void RasterizerVulkan::DispatchCompute() {
+@@ -1907,7 +1941,7 @@ void RasterizerVulkan::DispatchCompute() {
              TextureCacheRuntime::CopyByteAddressedShadow(cmdbuf, *byte_addressed_shadow, true);
          }
      });
@@ -2656,7 +2662,7 @@ index 7bbdc0c0cd..1773e89034 100644
          // The deferred native binding may follow DLSS's command buffer bindings.
          scheduler.InvalidateState();
      }
-@@ -2214,7 +2248,16 @@ void RasterizerVulkan::SignalReference() {
+@@ -2254,7 +2288,16 @@ void RasterizerVulkan::SignalReference() {
  }
  
  void RasterizerVulkan::ReleaseFences(bool force) {
@@ -2674,10 +2680,10 @@ index 7bbdc0c0cd..1773e89034 100644
  
  void RasterizerVulkan::FlushQueryResults(DAddr addr, u64 size) {
 diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.h b/src/video_core/renderer_vulkan/vk_rasterizer.h
-index bb97cc4f2c..95d5442b28 100644
+index 1cb5e85bec..1f11bef4fb 100644
 --- a/src/video_core/renderer_vulkan/vk_rasterizer.h
 +++ b/src/video_core/renderer_vulkan/vk_rasterizer.h
-@@ -305,6 +305,9 @@ private:
+@@ -306,6 +306,9 @@ private:
      std::optional<u64> oot_dlss_frame;
      std::optional<u64> oot_4k_scene_frame;
      VkImage oot_4k_guest_present{};
@@ -2688,7 +2694,7 @@ index bb97cc4f2c..95d5442b28 100644
          u64 frame{};
          const Tegra::MemoryManager* channel{};
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
-index 19bbcd9680..3564d57618 100644
+index 8ab7430eb4..6bd0078dd1 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
 +++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
 @@ -192,7 +192,7 @@ bool Scheduler::DeferFlush() {
@@ -3082,7 +3088,7 @@ index da57da6917..9ce8bec55d 100644
          UNIMPLEMENTED_MSG("Unimplemented format={}", format);
          return PixelFormat::A8B8G8R8_UNORM;
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 680986f5b2..869c602619 100644
+index 9fac6e1e33..24980d2d03 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -297,6 +297,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
@@ -3098,7 +3104,7 @@ index 680986f5b2..869c602619 100644
      if (log) {
          LOG_INFO(HW_GPU, "Texture cache thresholds: expected {} MiB, critical {} MiB, minimum {} MiB",
                   expected_memory >> 20, critical_memory >> 20, minimum_memory >> 20);
-@@ -1445,6 +1451,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
+@@ -1468,6 +1474,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
              return PixelFormat::R5G6B5_UNORM;
          case Service::android::PixelFormat::Bgra8888:
              return PixelFormat::B8G8R8A8_UNORM;
@@ -3127,7 +3133,7 @@ index 3ab924e37f..4321f9b83f 100644
      // Probe optional extensions against the same snapshot the caller verifies against, so the
      // check here and the verification in CreateInstance can never disagree (see TOCTOU note below).
 diff --git a/src/yuzu/configuration/configure_graphics.cpp b/src/yuzu/configuration/configure_graphics.cpp
-index 09ae6adf6e..b7447998b9 100644
+index 30d387fb31..d27baf4774 100644
 --- a/src/yuzu/configuration/configure_graphics.cpp
 +++ b/src/yuzu/configuration/configure_graphics.cpp
 @@ -235,7 +235,12 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
@@ -3144,7 +3150,7 @@ index 09ae6adf6e..b7447998b9 100644
                  // FSR needs a reversed slider and a 0.5 multiplier
                  return builder.BuildWidget(
                      setting, apply_funcs, ConfigurationShared::RequestType::ReverseSlider, true,
-@@ -253,6 +258,12 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
+@@ -257,6 +262,12 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
              continue;
          }
  
@@ -3157,7 +3163,7 @@ index 09ae6adf6e..b7447998b9 100644
          if (setting->Id() == Settings::values.renderer_backend.Id()) {
              // Add the renderer combobox now so it's at the top
              api_grid_layout->addWidget(widget);
-@@ -514,6 +525,9 @@ void ConfigureGraphics::UpdateAPILayout() {
+@@ -518,6 +529,9 @@ void ConfigureGraphics::UpdateAPILayout() {
      const auto current_backend = GetCurrentGraphicsBackend();
      const bool is_vulkan = current_backend == Settings::RendererBackend::Vulkan;
      vulkan_device_widget->setVisible(is_vulkan);
@@ -3180,13 +3186,13 @@ index 9002af437b..21429eedfd 100644
      QComboBox* aspect_ratio_combobox;
      QComboBox* resolution_combobox;
 diff --git a/src/yuzu/main_window.cpp b/src/yuzu/main_window.cpp
-index 1ae0a812e5..fcd57711bf 100644
+index 27691e4fa4..21292b4f9d 100644
 --- a/src/yuzu/main_window.cpp
 +++ b/src/yuzu/main_window.cpp
-@@ -2091,6 +2091,26 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
-         Settings::UpdateGPUAccuracy();
+@@ -2106,6 +2106,26 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
          LOG_INFO(Config, "Applied recommended MKW settings after per-game configuration");
      }
+     PrepareShaderPrecache(title_id, std::filesystem::path{filename.toStdU16String()});
 +
 +    if (title_id == Settings::OcarinaOfTimeProgramId && !asked_recommended_oot_settings) {
 +        asked_recommended_oot_settings = true;
@@ -3211,10 +3217,10 @@ index 1ae0a812e5..fcd57711bf 100644
  
      if (UISettings::values.select_user_on_boot && !user_flag_cmd_line) {
 diff --git a/src/yuzu/main_window.h b/src/yuzu/main_window.h
-index b5b060020c..74a49d013a 100644
+index 2dda29991f..c5028082d6 100644
 --- a/src/yuzu/main_window.h
 +++ b/src/yuzu/main_window.h
-@@ -510,6 +510,8 @@ private:
+@@ -515,6 +515,8 @@ private:
      MultiplayerState* multiplayer_state = nullptr;
      bool use_recommended_mkw_settings = false;
      bool asked_recommended_mkw_settings = false;
