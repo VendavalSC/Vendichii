@@ -1,8 +1,8 @@
 # Lichii Superbuild (unofficial)
 
-> ## ✅ v28 recommended
+> ## ✅ v29 recommended
 >
-> v28 is based on zortos `nx2` `c2e293ec` and includes the #910 Ocarina of Time texture-memo crash fix. Keep v24 as fallback if needed.
+> v29 is based on zortos `nx2` `c2e293ec`, includes #874 and the #910 Ocarina of Time texture-memo crash fix, and is the current recommended release. v28 and v24 remain fallbacks.
 
 ## Credits
 
@@ -83,9 +83,8 @@ a stock build as fallback.
 - Native HDR presentation from clshortfuse is carried locally: PR #180 here
   (a port of Djihads80/Eglantine#605). Both upstream PRs are still open. HDR is
   opt-in and off by default. If either lands, rebase and drop our copy.
-- OoT Zen 3 preset and build target from PR #2 (EvertonCeciliano) is carried
-  locally: the recommended OoT preset disables memory-operation syncs and
-  enables NVIDIA DLSS where available, and `YUZU_BUILD_PRESET=zen3` is accepted.
+- OoT recommended preset from PR #2 (EvertonCeciliano): disables memory-operation
+  syncs for OoT and enables NVIDIA DLSS where available.
 - License: GPL-3.0-or-later, inherited from Lichii/Eden/yuzu
 
 ## Branches
