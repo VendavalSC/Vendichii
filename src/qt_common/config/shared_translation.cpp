@@ -542,6 +542,7 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
                           {
                               PAIR(FrameGenType, Lsfg, tr("Lossless Scaling (LSFG)")),
                               PAIR(FrameGenType, Fsr3, tr("Optical Flow Interpolation (built-in)")),
+                              PAIR(FrameGenType, AmdFsr3, tr("AMD FSR 3 Frame Generation")),
                           }});
     translations->insert({Settings::EnumMetadata<Settings::ScalingFilter>::Index(),
                           {

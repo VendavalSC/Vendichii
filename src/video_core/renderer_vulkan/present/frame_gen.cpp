@@ -203,16 +203,17 @@ void FrameGen::Process(const Device& device, Frame* frame, VkFormat format,
     }
 
     if (unavailable || !Settings::values.frame_gen.GetValue()) {
-        if (chain || fsr3_chain) {
+        if (chain || fsr3_chain || amd_chain) {
             scheduler.Finish();
             chain.reset();
             fsr3_chain.reset();
+            amd_chain.reset();
         }
         warm_streak = 0;
         return;
     }
 
-    if (!shaders->IsValid() && Settings::values.frame_gen_type.GetValue() != Settings::FrameGenType::Fsr3) {
+    if (!shaders->IsValid() && Settings::values.frame_gen_type.GetValue() == Settings::FrameGenType::Lsfg) {
         unavailable = true;
         state.store(shaders->IsDeviceSupported() ? VideoCore::FrameGenState::MissingLosslessDll
                                                  : VideoCore::FrameGenState::UnsupportedGpu,
@@ -232,7 +233,7 @@ void FrameGen::Process(const Device& device, Frame* frame, VkFormat format,
 
     const VkExtent2D extent{.width = frame->width, .height = frame->height};
     const f32 flow_scale = ConfiguredFlowScale(peak_guest_extent, extent);
-    if ((!chain && !fsr3_chain) || built_extent.width != extent.width || built_extent.height != extent.height ||
+    if ((!chain && !fsr3_chain && !amd_chain) || built_extent.width != extent.width || built_extent.height != extent.height ||
         built_format != format || built_flow_scale != flow_scale) {
         Rebuild(device, extent, format, flow_scale);
     }
@@ -248,7 +249,9 @@ void FrameGen::Process(const Device& device, Frame* frame, VkFormat format,
 
     const bool use_fsr3 = Settings::values.frame_gen_type.GetValue() == Settings::FrameGenType::Fsr3;
 
-    if (use_fsr3 && fsr3_chain) {
+    if (amd_chain) {
+        amd_chain->Process(*frame->image);
+    } else if (use_fsr3 && fsr3_chain) {
         scheduler.RequestOutsideRenderPassOperationContext();
         fsr3_chain->Process(device, scheduler, *frame->image, *frame->storage_view, count);
     } else if (chain) {
@@ -287,7 +290,13 @@ size_t FrameGen::GeneratedFrameCount() const {
 void FrameGen::GenerateInto(const Device& device, Frame* destination, size_t generation) {
     const bool use_fsr3 = Settings::values.frame_gen_type.GetValue() == Settings::FrameGenType::Fsr3;
 
-    if (use_fsr3 && fsr3_chain) {
+    if (amd_chain) {
+        // FSR 3 interpolates the midpoint only; every generated frame of a frame is that one.
+        if (amd_chain->IsReady()) {
+            scheduler.RequestOutsideRenderPassOperationContext();
+            amd_chain->Generate(*destination->image);
+        }
+    } else if (use_fsr3 && fsr3_chain) {
         const f32 blend = static_cast<f32>(generation + 1) / static_cast<f32>(last_generations + 1);
         const f32 flow_scale = ConfiguredFlowScale(peak_guest_extent, built_extent);
 
@@ -314,10 +323,15 @@ void FrameGen::Rebuild(const Device& device, VkExtent2D extent, VkFormat format,
     scheduler.Finish();
     chain.reset();
     fsr3_chain.reset();
+    amd_chain.reset();
 
     built_flow_scale = flow_scale;
 
-    if (Settings::values.frame_gen_type.GetValue() == Settings::FrameGenType::Fsr3) {
+    const auto type = Settings::values.frame_gen_type.GetValue();
+    if (type == Settings::FrameGenType::AmdFsr3 && AmdFsr3FrameGen::IsSupported(device, format)) {
+        amd_chain = std::make_unique<AmdFsr3FrameGen>(device, scheduler, memory_allocator, extent,
+                                                      format);
+    } else if (type != Settings::FrameGenType::Lsfg) {
         fsr3_chain.emplace(device, memory_allocator, extent, format);
     } else {
         chain.emplace(device, memory_allocator, *shaders, extent, format, built_flow_scale);
