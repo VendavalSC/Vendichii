@@ -33,8 +33,10 @@
 #include "video_core/host_shaders/ffx_fg_of_scd_divergence_comp_spv.h"
 #include "video_core/host_shaders/ffx_fg_of_scd_histogram_comp_spv.h"
 #include "video_core/host_shaders/ffx_fg_of_search_comp_spv.h"
-#include "video_core/renderer_vulkan/present/amd_fsr3_frame_gen.h"
+// vk_compute_pass.h (through gpu.h) before any Vulkan header: on Linux vulkan.h pulls in
+// Xlib.h, whose Success macro breaks NvResult::Success.
 #include "video_core/renderer_vulkan/vk_compute_pass.h"
+#include "video_core/renderer_vulkan/present/amd_fsr3_frame_gen.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/vulkan_common/vulkan_device.h"
 
