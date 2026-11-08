@@ -2,6 +2,18 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v28
+
+- Based on zortos `nx2` `c2e293ec`, with the #910 Ocarina of Time texture-memo
+  crash fix: null texture views are no longer prepared on a memo hit.
+- Includes the official nx2 merge set: #858 (Bananza back-thread performance),
+  #878 (precache memory), #879 (AV1 libdav1d), #880 (backable texture), #881
+  (microphone silence), #885 (NUP zstd lazy decode) and #902 (SPIR-V
+  clip-distance race).
+- All v24 features included: OoT Zen 3 preset/build target, native HDR,
+  NVIDIA DLSS, Fritchii v4/v4.1 fixes and the full superbuild set.
+- Windows and Linux, standard and PGO.
+
 ## v24
 
 - Shader precache discovers every container the archive walker reads (#812),

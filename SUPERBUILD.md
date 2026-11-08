@@ -1,5 +1,9 @@
 # Lichii Superbuild (unofficial)
 
+> ## ✅ v28 recommended
+>
+> v28 is based on zortos `nx2` `c2e293ec` and includes the #910 Ocarina of Time texture-memo crash fix. Keep v24 as fallback if needed.
+
 ## Credits
 
 This build exists because of the work of:
@@ -25,7 +29,7 @@ a stock build as fallback.
 
 - Upstream: `zortos293/Lichii`
 - Branch: `nx2`
-- Base commit: `3153d96b97bc501b558441a4242ce31508e3a5c1` (2026-11-08).
+- Base commit: `c2e293ec88d931ecd1c82299289f582c23136ab7` (2026-11-08).
   The grass/foliage fix is now upstream as #551, so the 14-commit
   `capy/oot-hyrule-grass-fix` series is no longer carried.
 - Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -68,8 +72,8 @@ a stock build as fallback.
   (shader precache archive discovery), #841 (cached task/mesh pipelines),
   #885 (NUP zstd lazy decode), #858 (Bananza back-thread perf), #881
   (microphone silence), #880 (backable texture), #878 (precache memory),
-  #879 (AV1 decoder choice) and #902 (SPIR-V clip-distance race). Those are
-  not re-applied here.
+  #879 (AV1 decoder choice), #902 (SPIR-V clip-distance race) and #910
+  (texture-memo null-image crash). Those are not re-applied here.
 - PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
   and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
   locally. PR #635 is still open upstream; PR #644 (the R16F follow-up) was
@@ -206,6 +210,6 @@ See `tools/superbuild/README.md` for packaging notes.
 `superbuild`.
 
 ```bash
-git checkout 3153d96b
+git checkout c2e293ec
 git apply patches/superbuild.patch
 ```
