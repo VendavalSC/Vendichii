@@ -6,11 +6,14 @@
 #
 # By default it compiles with 4 jobs at below-normal priority so the PC stays quiet and usable;
 # -Jobs 0 uses every core at normal priority.
-# -Clang builds in build\clang with LLVM's clang-cl, ThinLTO and lichii-windows.profdata (PGO trained on Ocarina).
+# -Clang builds in build\clang with LLVM's clang-cl, ThinLTO and a PGO profile: vendichii.profdata
+# when it exists (tools\windows\pgo-merge.ps1), else lichii-windows.profdata (trained on Ocarina).
+# -PgoGenerate builds an instrumented build in build\pgo-gen that writes build\pgo-gen\profiles\*.profraw.
 
 param(
     [switch]$Reconfigure,
     [switch]$Clang,
+    [switch]$PgoGenerate,
     [int]$Jobs = 4
 )
 
@@ -21,13 +24,25 @@ if ($Jobs -gt 0) {
     (Get-Process -Id $PID).PriorityClass = "BelowNormal"
 }
 $repo = Resolve-Path "$PSScriptRoot\..\.."
-$build = if ($Clang) { "$repo\build\clang" } else { "$repo\build\release" }
+$build = if ($PgoGenerate) { "$repo\build\pgo-gen" } elseif ($Clang) { "$repo\build\clang" } else { "$repo\build\release" }
 $clangArgs = @()
-if ($Clang) {
+if ($Clang -or $PgoGenerate) {
     $llvm = "$env:ProgramFiles/LLVM/bin" -replace '\\', '/'
-    $profile = "$repo/lichii-windows.profdata" -replace '\\', '/'
-    $pgo = "/clang:-fprofile-use=$profile -Wno-backend-plugin -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date"
-    $clangArgs = @(
+    if ($PgoGenerate) {
+        # The instrumented exe writes where LLVM_PROFILE_FILE says (pgo-run.ps1 sets it).
+        $pgo = "/clang:-fprofile-generate /clang:-fprofile-update=atomic"
+        $rt = Get-ChildItem "$env:ProgramFiles\LLVM\lib\clang\*\lib\windows\clang_rt.profile-x86_64.lib" |
+            Select-Object -First 1
+        # The linker flags are split on spaces: give the library by its short (8.3) path.
+        $short = (New-Object -ComObject Scripting.FileSystemObject).GetFile($rt.FullName).ShortPath
+        $clangArgs += "-DCMAKE_EXE_LINKER_FLAGS=$($short -replace '\\', '/')"
+    } else {
+        $profile = "$repo\vendichii.profdata"
+        if (!(Test-Path $profile)) { $profile = "$repo\lichii-windows.profdata" }
+        $profile = $profile -replace '\\', '/'
+        $pgo = "/clang:-fprofile-use=$profile -Wno-backend-plugin -Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date"
+    }
+    $clangArgs += @(
         "-DCMAKE_C_COMPILER=$llvm/clang-cl.exe",
         "-DCMAKE_CXX_COMPILER=$llvm/clang-cl.exe",
         "-DCMAKE_LINKER=$llvm/lld-link.exe",
