@@ -2,6 +2,15 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v29
+
+- Adds #874: fence-flagged payload releases stay synchronized at low
+  accuracy/Default fences, restoring Ocarina of Time performance after #337.
+- Based on v28 / zortos `nx2` `c2e293ec`; includes the #910 OoT texture-memo
+  crash fix and the official nx2 merge set.
+- All v28 features included.
+- Windows and Linux, standard and PGO.
+
 ## v28
 
 - Based on zortos `nx2` `c2e293ec`, with the #910 Ocarina of Time texture-memo
@@ -10,7 +19,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   #878 (precache memory), #879 (AV1 libdav1d), #880 (backable texture), #881
   (microphone silence), #885 (NUP zstd lazy decode) and #902 (SPIR-V
   clip-distance race).
-- All v24 features included: OoT Zen 3 preset/build target, native HDR,
+- All v24 features included: native HDR,
   NVIDIA DLSS, Fritchii v4/v4.1 fixes and the full superbuild set.
 - Windows and Linux, standard and PGO.
 
@@ -21,7 +30,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 - Cached task/mesh pipelines are built at boot on GPUs without
   VK_EXT_mesh_shader (#841), avoiding first-use pipeline builds.
 - All v23 features included: GPU-thread poll timer, pipeline-cache filtering,
-  OoT Zen 3 preset and build target, native HDR, NVIDIA DLSS and the full
+  native HDR, NVIDIA DLSS and the full
   superbuild set.
 - Windows and Linux, standard and PGO.
 ## v23
@@ -30,7 +39,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   channel makes progress, with shorter Windows waits (#621).
 - Pipeline caches keep only undamaged, non-stale and non-duplicate records,
   avoiding slow loads and corrupt cache entries (#815).
-- All v22 features included: OoT Zen 3 preset and build target, shader
+- All v22 features included: shader
   precache, split GPU thread pinning, OoT FPS Unlock, native HDR, NVIDIA DLSS,
   the Fritchii fixes and the full superbuild set.
 - Windows and Linux, standard and PGO.
@@ -38,7 +47,6 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 
 - Ocarina of Time's recommended preset now also disables memory-operation
   synchronization and turns on NVIDIA DLSS where available (FSR 3.1 fallback).
-- New Zen 3 build target (`YUZU_BUILD_PRESET=zen3`) for Ryzen 5000-class CPUs.
 - Latest `nx2` batch: shader precache before game start (#781), split GPU
   threads pinned to their own cores by default (#769), OoT FPS Unlock and
   Switch 2 frame-rate limit slider (#655), non-blocking channel waits (#752),

@@ -9,6 +9,132 @@ index 99172a7f34..06f1952ee9 100644
 +patches/*.patch -text
 +tools/superbuild/*.sh text eol=lf
 +SUPERBUILD.md text eol=lf
+diff --git a/.github/workflows/macos-superbuild.yml b/.github/workflows/macos-superbuild.yml
+new file mode 100644
+index 0000000000..3295da8d47
+--- /dev/null
++++ b/.github/workflows/macos-superbuild.yml
+@@ -0,0 +1,120 @@
++name: macos-superbuild
++
++on:
++  workflow_dispatch:
++    inputs:
++      tag:
++        description: Release tag to label the build
++        required: true
++        default: v28
++
++permissions:
++  contents: read
++
++jobs:
++  macos-arm64:
++    name: macOS arm64
++    runs-on: macos-15
++    steps:
++      - name: Check out source
++        uses: actions/checkout@v4
++
++      - name: Install macOS dependencies
++        shell: bash
++        env:
++          HOMEBREW_NO_INSTALL_CLEANUP: 1
++          HOMEBREW_NO_AUTO_UPDATE: 1
++        run: |
++          brew install autoconf automake boost ffmpeg fmt glslang hidapi libtool libusb lz4 ninja \
++            nlohmann-json openssl pkg-config qt@6 sdl3 speexdsp zlib zstd cmake catch2 molten-vk \
++            vulkan-loader spirv-tools vulkan-utility-libraries ccache
++
++      - name: Configure
++        shell: bash
++        run: |
++          set -euo pipefail
++          cmake -S . -B build/release -G Ninja \
++            -DCMAKE_BUILD_TYPE=Release \
++            -DBUILD_TESTING=OFF \
++            -DYUZU_TESTS=OFF \
++            -DYUZU_CMD=ON \
++            -DYUZU_ROOM=OFF \
++            -DYUZU_ROOM_STANDALONE=OFF \
++            -DYUZU_USE_BUNDLED_QT=OFF \
++            "-DCMAKE_PREFIX_PATH=$(brew --prefix qt@6);$(brew --prefix zlib)" \
++            "-DOPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" \
++            -DVulkanHeaders_FORCE_BUNDLED=ON \
++            -DVulkanUtilityLibraries_FORCE_BUNDLED=ON \
++            -DENABLE_UPDATE_CHECKER=ON \
++            -DLICHII_BUILD_TAG=${{ inputs.tag }} \
++            -DLICHII_BUILD_PLATFORM=macos-arm64 \
++            -DUSE_DISCORD_PRESENCE=OFF \
++            -DUSE_CCACHE=ON
++
++      - name: Build
++        shell: bash
++        run: cmake --build build/release --target yuzu yuzu-cmd --parallel 4
++
++      - name: Package macOS app
++        shell: bash
++        run: |
++          set -euo pipefail
++          app=build/release/bin/lichii.app
++          test -x "$app/Contents/MacOS/lichii"
++          test -x build/release/bin/eden-cli
++          cp build/release/bin/eden-cli "$app/Contents/MacOS/eden-cli"
++          cp build/release/bin/nx2_switches.txt "$app/Contents/Resources/nx2_switches.txt"
++          cp MCP-DEBUG.md "$app/Contents/Resources/MCP-DEBUG.md"
++          mkdir -p "$app/Contents/Resources/tools/nx2" "$app/Contents/Resources/docs/nx2"
++          cp tools/nx2/debug_mcp.py tools/nx2/test_debug_mcp.py "$app/Contents/Resources/tools/nx2/"
++          cp docs/nx2/debug-mcp.md "$app/Contents/Resources/docs/nx2/"
++          "$(brew --prefix qt@6)/bin/macdeployqt" "$app" \
++            -executable="$app/Contents/MacOS/eden-cli" -libpath="$(brew --prefix)/lib" \
++            -always-overwrite -verbose=1
++          rm -f "$app/Contents/PlugIns/platforminputcontexts/libqtvirtualkeyboardplugin.dylib"
++          binaries=$(find "$app/Contents" -type f \( -perm -u+x -o -name '*.dylib' \) \
++            -exec sh -c 'file -b "$1" | grep -q Mach-O' _ {} \; -print)
++          for binary in $binaries; do
++            otool -l "$binary" | awk '/cmd LC_RPATH/ {getline; getline; print $2}' |
++              { grep -E '^/(opt/homebrew|usr/local)/' || true; } | while read -r rpath; do
++                install_name_tool -delete_rpath "$rpath" "$binary" 2> /dev/null
++              done
++          done
++          for program in lichii eden-cli; do
++            install_name_tool -add_rpath @executable_path/../Frameworks \
++              "$app/Contents/MacOS/$program" 2> /dev/null
++          done
++          leaks=$(for binary in $binaries; do
++            otool -L "$binary" | grep -E '^\s+/(opt/homebrew|usr/local)/'
++            otool -l "$binary" | awk '/cmd LC_RPATH/ {getline; getline; print $2}' |
++              grep -E '^/(opt/homebrew|usr/local)/'
++          done || true)
++          if [ -n "$leaks" ]; then
++            echo "References still pointing outside the bundle:"
++            echo "$leaks" | sort -u
++            exit 1
++          fi
++          codesign --force --deep --sign - "$app"
++          if [ -f dist/eglantine.entitlements ]; then
++            codesign --force --sign - --entitlements dist/eglantine.entitlements \
++              "$app/Contents/MacOS/eden-cli"
++            codesign --force --sign - --entitlements dist/eglantine.entitlements "$app"
++          fi
++          codesign --verify --deep --strict "$app"
++          ditto -c -k --keepParent "$app" "Lichii-${{ inputs.tag }}-macos-arm64.zip"
++          dmgdir=$(mktemp -d)
++          ditto "$app" "$dmgdir/lichii.app"
++          ln -s /Applications "$dmgdir/Applications"
++          hdiutil create -volname "Lichii" -srcfolder "$dmgdir" -ov -format UDZO \
++            "Lichii-${{ inputs.tag }}-macos-arm64.dmg"
++          ls -la "Lichii-${{ inputs.tag }}-macos-arm64.zip" "Lichii-${{ inputs.tag }}-macos-arm64.dmg"
++
++      - name: Upload macOS binaries
++        uses: actions/upload-artifact@v7
++        with:
++          name: Lichii-${{ inputs.tag }}-macos-arm64
++          path: |
++            Lichii-${{ inputs.tag }}-macos-arm64.zip
++            Lichii-${{ inputs.tag }}-macos-arm64.dmg
++          if-no-files-found: error
++          compression-level: 0
 diff --git a/.github/workflows/release-binaries.yml b/.github/workflows/release-binaries.yml
 index d7750e2e5d..23d8bc5c88 100644
 --- a/.github/workflows/release-binaries.yml
@@ -54,10 +180,10 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..d72091944a 100644
+index bc40878ce6..8b21cf404d 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,216 @@
+@@ -1,11 +1,224 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -66,20 +192,29 @@ index bc40878ce6..d72091944a 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v28
++## v29
  
 -## [0.1.0]
++- Adds #874: fence-flagged payload releases stay synchronized at low
++  accuracy/Default fences, restoring Ocarina of Time performance after #337.
++- Based on v28 / zortos `nx2` `c2e293ec`; includes the #910 OoT texture-memo
++  crash fix and the official nx2 merge set.
++- All v28 features included.
++- Windows and Linux, standard and PGO.
+ 
+-- Initial release candidate
++## v28
++
 +- Based on zortos `nx2` `c2e293ec`, with the #910 Ocarina of Time texture-memo
 +  crash fix: null texture views are no longer prepared on a memo hit.
 +- Includes the official nx2 merge set: #858 (Bananza back-thread performance),
 +  #878 (precache memory), #879 (AV1 libdav1d), #880 (backable texture), #881
 +  (microphone silence), #885 (NUP zstd lazy decode) and #902 (SPIR-V
 +  clip-distance race).
-+- All v24 features included: OoT Zen 3 preset/build target, native HDR,
++- All v24 features included: native HDR,
 +  NVIDIA DLSS, Fritchii v4/v4.1 fixes and the full superbuild set.
 +- Windows and Linux, standard and PGO.
- 
--- Initial release candidate
++
 +## v24
 +
 +- Shader precache discovers every container the archive walker reads (#812),
@@ -87,7 +222,7 @@ index bc40878ce6..d72091944a 100644
 +- Cached task/mesh pipelines are built at boot on GPUs without
 +  VK_EXT_mesh_shader (#841), avoiding first-use pipeline builds.
 +- All v23 features included: GPU-thread poll timer, pipeline-cache filtering,
-+  OoT Zen 3 preset and build target, native HDR, NVIDIA DLSS and the full
++  native HDR, NVIDIA DLSS and the full
 +  superbuild set.
 +- Windows and Linux, standard and PGO.
 +## v23
@@ -96,7 +231,7 @@ index bc40878ce6..d72091944a 100644
 +  channel makes progress, with shorter Windows waits (#621).
 +- Pipeline caches keep only undamaged, non-stale and non-duplicate records,
 +  avoiding slow loads and corrupt cache entries (#815).
-+- All v22 features included: OoT Zen 3 preset and build target, shader
++- All v22 features included: shader
 +  precache, split GPU thread pinning, OoT FPS Unlock, native HDR, NVIDIA DLSS,
 +  the Fritchii fixes and the full superbuild set.
 +- Windows and Linux, standard and PGO.
@@ -104,7 +239,6 @@ index bc40878ce6..d72091944a 100644
 +
 +- Ocarina of Time's recommended preset now also disables memory-operation
 +  synchronization and turns on NVIDIA DLSS where available (FSR 3.1 fallback).
-+- New Zen 3 build target (`YUZU_BUILD_PRESET=zen3`) for Ryzen 5000-class CPUs.
 +- Latest `nx2` batch: shader precache before game start (#781), split GPU
 +  threads pinned to their own cores by default (#769), OoT FPS Unlock and
 +  Switch 2 frame-rate limit slider (#655), non-blocking channel waits (#752),
@@ -1701,6 +1835,22 @@ index 0000000000..e95883e377
 +    vec3 change = abs(after - before);
 +    imageStore(effects, pixel, vec4(smoothstep(0.02, 0.08, max(change.r, max(change.g, change.b)))));
 +}
+diff --git a/src/video_core/memory_manager.cpp b/src/video_core/memory_manager.cpp
+index b5b513a56a..78de12a9b5 100644
+--- a/src/video_core/memory_manager.cpp
++++ b/src/video_core/memory_manager.cpp
+@@ -953,8 +953,9 @@ boost::container::small_vector<std::pair<DAddr, std::size_t>, 32>
+ MemoryManager::GetSubmappedDeviceRange(GPUVAddr gpu_addr, std::size_t size) const {
+     boost::container::small_vector<std::pair<DAddr, std::size_t>, 32> result{};
+     if (IsWithinGPUAddressRange(gpu_addr)) {
+-        GetSubmappedRangeImpl<false>(gpu_addr, (std::min)(size, address_space_size - gpu_addr),
+-                                     result);
++        GetSubmappedRangeImpl<false>(
++            gpu_addr, std::min(size, static_cast<std::size_t>(address_space_size - gpu_addr)),
++            result);
+     }
+     return result;
+ }
 diff --git a/src/video_core/nx2.h b/src/video_core/nx2.h
 index 2ed45f2889..8464c03982 100644
 --- a/src/video_core/nx2.h
@@ -1715,10 +1865,10 @@ index 2ed45f2889..8464c03982 100644
          auto& word = g_nx2_gpu_written_pages[page / 64];
          if ((word.load(std::memory_order_relaxed) & mask) != mask) {
 diff --git a/src/video_core/query_cache/query_cache.h b/src/video_core/query_cache/query_cache.h
-index 21bd05449c..dfd62f42f0 100644
+index 21bd05449c..f3cd4b0ed1 100644
 --- a/src/video_core/query_cache/query_cache.h
 +++ b/src/video_core/query_cache/query_cache.h
-@@ -282,9 +282,32 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -282,9 +282,37 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
      };
      u8* pointer = impl->device_memory.template GetPointer<u8>(cpu_addr);
      u8* pointer_timestamp = impl->device_memory.template GetPointer<u8>(cpu_addr + 8);
@@ -1730,12 +1880,17 @@ index 21bd05449c..dfd62f42f0 100644
 +    // fence that did not wait for the host GPU, its tree leaves flickered under CPU load. They are
 +    // written once the host GPU completed the work before them. Until then only conditional
 +    // rendering sees them (delayed_reports); tracking them as pending made CPU reads wait.
-+    const bool free_on_run = is_fence && Tegra::g_nx2_ampere.load(std::memory_order_relaxed);
-+    bool is_synced = (free_on_run || (Settings::IsGPUFenceBehaviorDefault()
-+                                          ? !Settings::IsGPULevelHigh()
-+                                          : !Settings::IsGPUFenceBehaviorBalanced() &&
-+                                                !Settings::IsGPUFenceBehaviorAccurate())) &&
-+                     is_fence;
++    const bool low_accuracy = Settings::IsGPUFenceBehaviorDefault()
++                                  ? !Settings::IsGPULevelHigh()
++                                  : !Settings::IsGPUFenceBehaviorBalanced() &&
++                                        !Settings::IsGPUFenceBehaviorAccurate();
++    // A payload release writes a constant: at low accuracy with Default fences, keep it
++    // synchronized as before #337 so channels do not wait on the host GPU. Counter reports keep
++    // the delayed path; only free_on_run can still defer them.
++    const bool payload_release = is_fence && counter_type == QueryType::Payload && low_accuracy;
++    const bool free_on_run =
++        is_fence && !payload_release && Tegra::g_nx2_ampere.load(std::memory_order_relaxed);
++    bool is_synced = (payload_release || free_on_run || low_accuracy) && is_fence;
 +    std::function<void()> operation([this, is_synced, free_on_run, new_query_id, streamer,
 +                                     query_base = query, query_location, pointer, pointer_timestamp,
 +                                     cpu_addr, addr, asid = gpu_memory->GetID(), counter_type] {
@@ -1754,7 +1909,7 @@ index 21bd05449c..dfd62f42f0 100644
          if (True(query_base->flags & QueryFlagBits::IsInvalidated)) {
              if (const u64 trace = QueryTrace::Sample(QueryTrace::Event::Discard)) {
                  LOG_INFO(HW_GPU,
-@@ -293,7 +316,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -293,7 +321,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
                           trace, asid, addr, cpu_addr, static_cast<u32>(counter_type),
                           static_cast<u32>(query_base->flags));
              }
@@ -1763,7 +1918,7 @@ index 21bd05449c..dfd62f42f0 100644
              return;
          }
          if (False(query_base->flags & QueryFlagBits::IsFinalValueSynced)) [[unlikely]] {
-@@ -306,7 +329,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -306,7 +334,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
              }
              LOG_ERROR(HW_GPU,
                        "Query report value not synchronized. Consider increasing GPU accuracy.");
@@ -1772,7 +1927,7 @@ index 21bd05449c..dfd62f42f0 100644
              return;
          }
          query_base->value += streamer->GetAmendValue();
-@@ -329,10 +352,19 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -329,10 +357,19 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
                       wide ? query_base->value : static_cast<u32>(query_base->value),
                       static_cast<u32>(query_base->flags));
          }
@@ -1795,7 +1950,7 @@ index 21bd05449c..dfd62f42f0 100644
          impl->rasterizer.SignalFence(std::move(operation));
          VideoCore::g_signaling_query_report_fence = false;
      } else {
-@@ -359,6 +391,12 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
+@@ -359,6 +396,12 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
          }
          impl->rasterizer.SyncOperation(std::move(operation));
      }
@@ -1808,7 +1963,7 @@ index 21bd05449c..dfd62f42f0 100644
      auto [cont_addr, base] = gen_caching_indexing(cpu_addr);
      {
          std::scoped_lock lock(cache_mutex);
-@@ -442,27 +480,30 @@ bool QueryCacheBase<Traits>::AccelerateHostConditionalRendering() {
+@@ -442,27 +485,30 @@ bool QueryCacheBase<Traits>::AccelerateHostConditionalRendering() {
          }
          VAddr cpu_addr = *cpu_addr_opt;
          std::scoped_lock lock(cache_mutex);
@@ -1855,7 +2010,7 @@ index 21bd05449c..dfd62f42f0 100644
          qc_dirty |= True(query->flags & QueryFlagBits::IsHostManaged) &&
                      False(query->flags & QueryFlagBits::IsGuestSynced);
          return VideoCommon::LookupData{
-@@ -511,6 +552,7 @@ template <typename Traits>
+@@ -511,6 +557,7 @@ template <typename Traits>
  void QueryCacheBase<Traits>::CommitAsyncFlushes() {
      // Make sure to have the results synced in Host.
      NotifyWFI();
@@ -1863,7 +2018,7 @@ index 21bd05449c..dfd62f42f0 100644
  
      u64 mask{};
      {
-@@ -545,7 +587,7 @@ void QueryCacheBase<Traits>::CommitAsyncFlushes() {
+@@ -545,7 +592,7 @@ void QueryCacheBase<Traits>::CommitAsyncFlushes() {
  
  template <typename Traits>
  bool QueryCacheBase<Traits>::HasUncommittedFlushes() const {
@@ -1872,7 +2027,7 @@ index 21bd05449c..dfd62f42f0 100644
      impl->ForEachStreamer([&result](StreamerInterface* streamer) {
          result |= streamer->HasUnsyncedQueries();
          return result;
-@@ -555,7 +597,7 @@ bool QueryCacheBase<Traits>::HasUncommittedFlushes() const {
+@@ -555,7 +602,7 @@ bool QueryCacheBase<Traits>::HasUncommittedFlushes() const {
  
  template <typename Traits>
  bool QueryCacheBase<Traits>::HasPendingFenceWork() const {
@@ -1881,7 +2036,7 @@ index 21bd05449c..dfd62f42f0 100644
      impl->ForEachStreamer([&result](StreamerInterface* streamer) {
          result |= streamer->HasUnsyncedQueries() || streamer->HasPendingSync();
          return result;
-@@ -652,4 +694,4 @@ void QueryCacheBase<Traits>::RequestGuestHostSync() {
+@@ -652,4 +699,4 @@ void QueryCacheBase<Traits>::RequestGuestHostSync() {
      impl->rasterizer.ReleaseFences();
  }
  
