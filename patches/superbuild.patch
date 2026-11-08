@@ -11,7 +11,7 @@ index 99172a7f34..06f1952ee9 100644
 +SUPERBUILD.md text eol=lf
 diff --git a/.github/workflows/macos-superbuild.yml b/.github/workflows/macos-superbuild.yml
 new file mode 100644
-index 0000000000..3295da8d47
+index 0000000000..cbeb16c754
 --- /dev/null
 +++ b/.github/workflows/macos-superbuild.yml
 @@ -0,0 +1,120 @@
@@ -80,7 +80,7 @@ index 0000000000..3295da8d47
 +          test -x "$app/Contents/MacOS/lichii"
 +          test -x build/release/bin/eden-cli
 +          cp build/release/bin/eden-cli "$app/Contents/MacOS/eden-cli"
-+          cp build/release/bin/nx2_switches.txt "$app/Contents/Resources/nx2_switches.txt"
++          cp dist/nx2_switches.txt "$app/Contents/Resources/nx2_switches.txt"
 +          cp MCP-DEBUG.md "$app/Contents/Resources/MCP-DEBUG.md"
 +          mkdir -p "$app/Contents/Resources/tools/nx2" "$app/Contents/Resources/docs/nx2"
 +          cp tools/nx2/debug_mcp.py tools/nx2/test_debug_mcp.py "$app/Contents/Resources/tools/nx2/"
@@ -180,7 +180,7 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..2dbebfebe7 100644
+index bc40878ce6..8f8435a023 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
 @@ -1,11 +1,233 @@
@@ -201,7 +201,7 @@ index bc40878ce6..2dbebfebe7 100644
 +- Includes #874: fence-flagged payload releases stay synchronized at low
 +  accuracy/Default fences, restoring OoT performance after #337.
 +- Includes the #910 OoT texture-memo crash fix and the full v29 feature set.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +## v29
  
 -- Initial release candidate
@@ -210,7 +210,7 @@ index bc40878ce6..2dbebfebe7 100644
 +- Based on v28 / zortos `nx2` `c2e293ec`; includes the #910 OoT texture-memo
 +  crash fix and the official nx2 merge set.
 +- All v28 features included.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v28
 +
@@ -222,7 +222,7 @@ index bc40878ce6..2dbebfebe7 100644
 +  clip-distance race).
 +- All v24 features included: native HDR,
 +  NVIDIA DLSS, Fritchii v4/v4.1 fixes and the full superbuild set.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v24
 +
@@ -233,7 +233,7 @@ index bc40878ce6..2dbebfebe7 100644
 +- All v23 features included: GPU-thread poll timer, pipeline-cache filtering,
 +  native HDR, NVIDIA DLSS and the full
 +  superbuild set.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +## v23
 +
 +- Smoother GPU thread scheduling: the pending-channel poll timer resets when a
@@ -243,7 +243,7 @@ index bc40878ce6..2dbebfebe7 100644
 +- All v22 features included: shader
 +  precache, split GPU thread pinning, OoT FPS Unlock, native HDR, NVIDIA DLSS,
 +  the Fritchii fixes and the full superbuild set.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +## v22
 +
 +- Ocarina of Time's recommended preset now also disables memory-operation
@@ -257,7 +257,7 @@ index bc40878ce6..2dbebfebe7 100644
 +  cheaper ASTC uploads (#296), stale-image upload fixes (#818/#817), Switch 2
 +  button icons (#691) and decoder/movie-clock fixes (#809).
 +- The rest of the superbuild set is unchanged.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v21
 +
@@ -277,7 +277,7 @@ index bc40878ce6..2dbebfebe7 100644
 +  batching, mja00 work, Nolar's video/scheduler/texture-cache fixes, the
 +  `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets, NVIDIA DLSS on Windows,
 +  native HDR (opt-in) and the updater pointed at this repository.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v20
 +
@@ -293,7 +293,7 @@ index bc40878ce6..2dbebfebe7 100644
 +  batching, mja00 uniform-bank/HMMA work, Nolar's video, scheduler and
 +  texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and `ASYNC_DISCARD` presets,
 +  NVIDIA DLSS on Windows, and an updater pointed at this repository.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v19
 +
@@ -308,14 +308,14 @@ index bc40878ce6..2dbebfebe7 100644
 +  page-mark batching, the mja00 uniform-bank/HMMA work, Nolar's video,
 +  scheduler and texture-cache fixes, the `PRELOAD_ALL_PIPELINES` and
 +  `ASYNC_DISCARD` presets, and an updater pointed at this repository.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v18
 +
 +- Movie video now stays in sync with its audio, with late-frame dropping, movie
 +  pacing and faster streaming for Switch 2 titles (upstream #659).
 +- Fixed an RDNA2 GPU crash caused by cooperative-matrix HMMA (upstream #657).
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v17
 +
@@ -325,7 +325,7 @@ index bc40878ce6..2dbebfebe7 100644
 +- NVIDIA DLSS for OoT: the effects mask is now handed to Streamline in a format
 +  it accepts, so the glow and particle fix works. DLSS presets E and F are now
 +  selectable.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v16
 +
@@ -335,14 +335,14 @@ index bc40878ce6..2dbebfebe7 100644
 +- Option to bypass Ocarina of Time's sharpening anti-aliasing network.
 +- Fix for night-time smear and flicker from Navi's glow, fireflies and dust when
 +  DLSS is on.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v15
 +
 +- Adds NVIDIA DLSS Super Resolution for Ocarina of Time and task/mesh pipelines
 +  through compute on GPUs without `VK_EXT_mesh_shader`.
 +- PGO builds verified and kept for Windows and Linux.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v14
 +
@@ -351,12 +351,12 @@ index bc40878ce6..2dbebfebe7 100644
 +- Cooperative-matrix HMMA for OoT (+12–24% standing/walking, RDNA4 41 → 60 fps),
 +  float16 support for LSFG frame generation, Dynamic FPS down to 10 fps, a 50 µs
 +  GPU-thread poll, texture-cache out-of-memory handling and framebuffer limits.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v13
 +
 +- In-place AppImage updates with one rollback copy.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v12
 +
@@ -364,38 +364,38 @@ index bc40878ce6..2dbebfebe7 100644
 +  releases.
 +- Added device-loss diagnostics and frame-generation status in the status bar.
 +- Windows packages use bundled static FFmpeg.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v11
 +
 +- Upstream fixes for OoT far-field sky haze, NaN handling, QMD release formats,
 +  microphone capture and NUP metadata.
 +- Windows packages use bundled static FFmpeg.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## v10
 +
 +- 43 upstream commits: 64-byte usage tracking, 32-bit global atomics, dynamic
 +  per-tap offsets, macro hand-back, Turing macro RAM, gathered-buffer lifetime,
 +  address-wrap rejection and game-list crash fixes.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## 261106-v9
 +
 +- Reviewed candidate fixes: NaN-defined min/max, QMD release formats,
 +  framebuffer limits, texture-cache OOM retries and mesh-shader logging.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## 261106-v8
 +
 +- Upstream OoT split-deadlock fix, GPU back bookkeeping, quad index growth,
 +  paired cbuf pointer and CPU-write download guard.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## 261106-v7
 +
 +- Opt-in desktop compatibility reports and Linux AppImage switch discovery.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## 261106-v6
 +
@@ -404,25 +404,25 @@ index bc40878ce6..2dbebfebe7 100644
 +  shaders). Session-only; saved preferences are unchanged. New desktop configs
 +  receive those values as first-run defaults.
 +- GPU thread wake from the sharkiix work.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## 261106-v4
 +
 +- Async native draw discard, worker lost-wake fix, misaligned SSBO and compute
 +  write ordering fixes.
 +- GPU thread wake: queued commands wake the GPU thread immediately.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## 261106-v3
 +
 +- Async native discard stops draws stalling on unbuilt pipelines.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +
 +## 261106-v2
 +
 +- First release with the full curated superbuild fix set: Bananza page-mark
 +  batching, OoT reticle, GPU split, Frizti ports, mja00 fixes and AMD fixes.
-+- Windows and Linux, standard and PGO.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 index b254665981..f4b7fc7f5f 100644
 --- a/CMakeLists.txt
