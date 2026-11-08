@@ -54,10 +54,10 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..b4f296dd3d 100644
+index bc40878ce6..c40328b0c5 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,175 @@
+@@ -1,11 +1,184 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -72,11 +72,20 @@ index bc40878ce6..b4f296dd3d 100644
 +- Ocarina of Time's recommended preset now also disables memory-operation
 +  synchronization and turns on NVIDIA DLSS where available (FSR 3.1 fallback).
 +- New Zen 3 build target (`YUZU_BUILD_PRESET=zen3`) for Ryzen 5000-class CPUs.
++- Latest `nx2` batch: shader precache before game start (#781), split GPU
++  threads pinned to their own cores by default (#769), OoT FPS Unlock and
++  Switch 2 frame-rate limit slider (#655), non-blocking channel waits (#752),
++  fence-flagged report timing (#337), buffer read traps (#264), MKW water and
++  waves (#690), deferred-clear render passes (#699), perspective-correct
++  noperspective interpolation (#820), bounded native compute storage (#816),
++  cheaper ASTC uploads (#296), stale-image upload fixes (#818/#817), Switch 2
++  button icons (#691) and decoder/movie-clock fixes (#809).
 +- The rest of the superbuild set is unchanged.
 +- Windows and Linux, standard and PGO.
-+## v21
  
 -- Initial release candidate
++## v21
++
 +- Ocarina of Time's water no longer flickers at Zora's River and other water; a
 +  storage-buffer address mistaken for a texture handle now binds no texture.
 +- Upload staging buffers are kept and reused instead of being freed every 64
@@ -393,10 +402,10 @@ index 0caad38d8b..e2898f2f77 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..979ddd8649
+index 0000000000..679249b51e
 --- /dev/null
 +++ b/SUPERBUILD.md
-@@ -0,0 +1,202 @@
+@@ -0,0 +1,206 @@
 +# Lichii Superbuild (unofficial)
 +
 +## Credits
@@ -424,7 +433,7 @@ index 0000000000..979ddd8649
 +
 +- Upstream: `zortos293/Lichii`
 +- Branch: `nx2`
-+- Base commit: `3099486e5b72c6db4520db26af7c2902277a8522` (2026-11-08).
++- Base commit: `18a78876bfee995c580e20d6b6eb157b57b86736` (2026-11-08).
 +  The grass/foliage fix is now upstream as #551, so the 14-commit
 +  `capy/oot-hyrule-grass-fix` series is no longer carried.
 +- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -458,8 +467,12 @@ index 0000000000..979ddd8649
 +  (Fritchii v4/v4.1: OoT water flicker, staging-buffer reuse, per-method
 +  switch reads), plus #781 (shader precache), #769 (split GPU thread
 +  pinning), #655 (OoT FPS unlock and frame-rate limit), #752 (channel wait),
-+  #337 (fence-flagged reports), #264 (buffer read traps), #690 (MKW water)
-+  and #699 (deferred clear). Those are not re-applied here.
++  #337 (fence-flagged reports), #264 (buffer read traps), #690 (MKW water),
++  #699 (deferred clear), #820 (noperspective interpolation), #816 (native
++  compute storage bounds), #296 (ASTC uploads), #821 (face-button glyphs),
++  #818 (stale guest image uploads), #817 (join-copy upload skip), #691
++  (Switch 2 button icons) and #809 (decoder packets/movie clock). Those are
++  not re-applied here.
 +- PR #635 (OoT DLSS glow/particle history fix) and the follow-up R16F bias-mask
 +  and DLSS preset E/F commits from `capy/oot-dlss-effects-mask-r16f` are carried
 +  locally. PR #635 is still open upstream; PR #644 (the R16F follow-up) was
@@ -596,7 +609,7 @@ index 0000000000..979ddd8649
 +`superbuild`.
 +
 +```bash
-+git checkout 3099486e
++git checkout 18a78876
 +git apply patches/superbuild.patch
 +```
 diff --git a/dist/nx2_switches.txt b/dist/nx2_switches.txt
@@ -739,7 +752,7 @@ index 140225da07..cc24eacf2f 100644
      }
      return {};
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 06575ad4ce..2c5371c223 100644
+index 5e709f9aaa..17efec35cf 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -339,6 +339,11 @@ struct Values {
@@ -798,10 +811,10 @@ index a38c8be777..a4f8a53c72 100644
  };
  
 diff --git a/src/core/hle/service/nx2_gsv.h b/src/core/hle/service/nx2_gsv.h
-index ed13092850..8984217f7a 100644
+index 4c700c0719..2b2b293da6 100644
 --- a/src/core/hle/service/nx2_gsv.h
 +++ b/src/core/hle/service/nx2_gsv.h
-@@ -80,6 +80,21 @@
+@@ -81,6 +81,21 @@
  
  namespace Service {
  
@@ -823,7 +836,7 @@ index ed13092850..8984217f7a 100644
  // Creates a session served by `iface` and returns its client end. Unlike PushIpcInterface this
  // works from a domain too, for callers that want a raw session handle.
  template <class T>
-@@ -1525,6 +1540,8 @@ struct Nx2NativeObjects {
+@@ -1526,6 +1541,8 @@ struct Nx2NativeObjects {
          std::shared_ptr<std::mutex> decoder_mutex;
          u32 gpu_maps{};     // outstanding 426 maps
          bool mapped_here{}; // 426 added its GPU mapping (no other mapping covered it)
@@ -832,7 +845,7 @@ index ed13092850..8984217f7a 100644
      };
      std::mutex mutex;
      std::map<u32, Memory> memories;
-@@ -1938,6 +1955,7 @@ private:
+@@ -1939,6 +1956,7 @@ private:
      // Eden's GPU thread has processed the frame. Otherwise the game laps the GPU thread and
      // rewrites command memory it hasn't read yet.
      u32 m_wait_timeouts{};
@@ -840,7 +853,7 @@ index ed13092850..8984217f7a 100644
      struct PresentStats {
          long long frame_us{}, fence_us{}, composite_us{}, pace_us{}, max_fence_us{};
          long long max_frame_us{}, hitches{};
-@@ -1999,9 +2017,13 @@ private:
+@@ -2000,9 +2018,13 @@ private:
          if (mkw_dynamic) {
              swap_interval = 1;
          }
@@ -855,7 +868,7 @@ index ed13092850..8984217f7a 100644
          const u32 refresh_rate = (timing & 0xffff) >= 30 && (timing & 0xffff) <= 240 ? timing & 0xffff : 60;
          if (trace) {
              m_frame_trace.interval = swap_interval;
-@@ -2125,7 +2147,7 @@ private:
+@@ -2126,7 +2148,7 @@ private:
  
      // Shows a presented native image: word 5 is the image id, ~word 22 / word 24 the GPU fence
      // (syncpoint, value) to wait for (layout from changes.patch). The image is a block-linear
@@ -864,7 +877,7 @@ index ed13092850..8984217f7a 100644
      // shown_size: the present's word 7, ((height - 1) << 16) | (width - 1) of the area the game drew
      // into from the image's top-left corner (0 when it gives none).
      void Composite(u32 image_id, u32 fence_id, u32 fence_value, u32 shown_size) {
-@@ -2134,7 +2156,9 @@ private:
+@@ -2135,7 +2157,9 @@ private:
          u64 parent_offset{};
          std::optional<Nx2NativeObjects::VideoTrace> video_trace;
          Nx2ImageLayout layout{};
@@ -875,7 +888,7 @@ index ed13092850..8984217f7a 100644
          {
              std::scoped_lock lk{m_objects->mutex};
              const auto image = m_objects->images.find(image_id);
-@@ -2149,7 +2173,9 @@ private:
+@@ -2150,7 +2174,9 @@ private:
              parent = memory->second.parent;
              parent_offset = memory->second.parent_offset + image->second.offset;
              layout = Nx2CalculateImageLayout(image->second.preference.data());
@@ -886,7 +899,7 @@ index ed13092850..8984217f7a 100644
              if (Nx2VideoTraceEnabled()) {
                  video_trace = m_objects->last_video_write;
              }
-@@ -2233,14 +2259,19 @@ private:
+@@ -2234,14 +2260,19 @@ private:
              .offset = 0,
              .width = layout.width,
              .height = layout.height,
@@ -910,7 +923,7 @@ index ed13092850..8984217f7a 100644
          }};
          std::vector<Nvidia::NvFence> fences;
          if (fence_id < 192) {
-@@ -2347,22 +2378,29 @@ private:
+@@ -2348,22 +2379,29 @@ private:
          TipcReplyWords(ctx, {60, 0});
      }
  
@@ -952,7 +965,7 @@ index ed13092850..8984217f7a 100644
      }
  
      // 212(u64 layer): u64 bits of the layer's buffer slots that are ready. The client polls it once
-@@ -3222,6 +3260,7 @@ private:
+@@ -3186,6 +3224,7 @@ private:
              }
              pictures.clear();
              decoder->Decode(input.data, input.pts, pictures);
@@ -960,7 +973,7 @@ index ed13092850..8984217f7a 100644
              if (input.end) {
                  decoder->Drain(pictures);
              }
-@@ -3974,6 +4013,22 @@ private:
+@@ -3936,6 +3975,22 @@ private:
          image.memory = w[19];
          std::copy_n(w + 2, image.preference.size(), image.preference.begin());
          image.size = Nx2CalculateImageLayout(w + 2).size;
@@ -1048,7 +1061,7 @@ index 94ee0b33a6..c0a57a100a 100644
      }
      return number;
 diff --git a/src/qt_common/config/shared_translation.cpp b/src/qt_common/config/shared_translation.cpp
-index 4ba0937a65..b5f4d20099 100644
+index 78927cd2c0..4373af1bb4 100644
 --- a/src/qt_common/config/shared_translation.cpp
 +++ b/src/qt_common/config/shared_translation.cpp
 @@ -142,6 +142,23 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
@@ -1076,10 +1089,10 @@ index 4ba0937a65..b5f4d20099 100644
             tr("Changes the output graphics API.\nVulkan is recommended."));
      INSERT(Settings, vulkan_device, tr("Device:"),
 diff --git a/src/tests/CMakeLists.txt b/src/tests/CMakeLists.txt
-index 4bc4b48fa0..72b17068dc 100644
+index 6bdf634501..811ab23f71 100644
 --- a/src/tests/CMakeLists.txt
 +++ b/src/tests/CMakeLists.txt
-@@ -78,6 +78,7 @@ add_executable(tests
+@@ -81,6 +81,7 @@ add_executable(tests
      video_core/gpu_written_pages.cpp
      video_core/command_writer.cpp
      video_core/split_fence_wait.cpp
@@ -1278,10 +1291,10 @@ index 0000000000..45c283667c
 +    }
 +}
 diff --git a/src/video_core/CMakeLists.txt b/src/video_core/CMakeLists.txt
-index 77afc5d80e..61c976d66f 100644
+index 43ea335169..9755ebfaba 100644
 --- a/src/video_core/CMakeLists.txt
 +++ b/src/video_core/CMakeLists.txt
-@@ -550,7 +550,7 @@ endif()
+@@ -551,7 +551,7 @@ endif()
  # setting is on. Only Streamline's MIT-licensed headers are compiled in and nothing of NVIDIA's is
  # linked or copied: sl.interposer.dll and the DLSS plugins are loaded at run time from the user's PC.
  cmake_dependent_option(ENABLE_NVIDIA_DLSS "Enable NVIDIA DLSS through NVIDIA Streamline" ON
@@ -1291,7 +1304,7 @@ index 77afc5d80e..61c976d66f 100644
      "NVIDIA Streamline SDK directory for its headers (empty: download them)")
  if (ENABLE_NVIDIA_DLSS)
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index 65f8f9d558..a0e3d4bd6d 100644
+index 1e58748dd9..466900ad9a 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
 @@ -21,6 +21,7 @@
@@ -1318,7 +1331,18 @@ index 65f8f9d558..a0e3d4bd6d 100644
          // Switch 2 titles: upload the CPU's bytes into the buffer instead, as CachedWriteMemory
          // does, so the page stays GPU-owned and nothing waits for the host GPU.
          static const int forced = [] {
-@@ -1398,6 +1404,7 @@ void BufferCache<P>::BindHostGraphicsUniformBuffer(size_t stage, u32 index, u32
+@@ -744,7 +750,9 @@ bool BufferCache<P>::BindGraphicsStorageBuffer(size_t stage, size_t ssbo_index,
+         StorageBufferBinding(ssbo_addr, cbuf_index, is_written,
+                              maxwell3d->GetNativeMacroEngine().native_turing ||
+                                  indirect_offset != ~0U,
+-                             indirect_offset != ~0U);
++                             indirect_offset != ~0U,
++                             maxwell3d->GetNativeMacroEngine().native_turing ||
++                                 indirect_offset != ~0U);
+     if (indirect_offset != ~0U) {
+         TraceTablePointer(false, stage, ssbo_index, cbuf_index, cbuf_offset, indirect_offset, holder,
+                           channel_state->storage_buffers[stage][ssbo_index]);
+@@ -1434,6 +1442,7 @@ void BufferCache<P>::BindHostGraphicsUniformBuffer(size_t stage, u32 index, u32
      // Native programs keep tables next to their code in a 64 KiB bank read with indirect offsets
      // (Splatoon Raiders: the dialogue box corners in c1). Writes to that memory can go unnoticed by
      // the memory tracker, leaving stale host contents, so upload such a bank again once per frame.
@@ -1326,6 +1350,64 @@ index 65f8f9d558..a0e3d4bd6d 100644
      if (has_host_buffer && (*channel_state->uniform_buffer_sizes)[stage][index] == 0x10000 &&
          size != 0 && gpu_memory != nullptr && gpu_memory->UsesNativeTiling() &&
          (Nx2Perf::Verify() || !native_indirect_uniforms_this_frame.contains(device_addr)) &&
+@@ -2994,14 +3003,15 @@ void BufferCache<P>::TraceTablePointer(bool compute, size_t stage, size_t ssbo_i
+ 
+ template <class P>
+ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index, bool is_written,
+-                                             bool native_pointer, bool table_pointer) const {
++                                             bool native_pointer, bool table_pointer,
++                                             bool mapping_sized) const {
+     const GPUVAddr gpu_addr = gpu_memory->Read<u64>(ssbo_addr);
+ 
+     if (gpu_addr == 0) {
+         return NULL_BINDING;
+     }
+ 
+-    const bool reads_size_word = !(table_pointer && !is_written) && !native_pointer;
++    const bool reads_size_word = !(table_pointer && !is_written) && !mapping_sized;
+     const u64 next_qword = reads_size_word ? gpu_memory->Read<u64>(ssbo_addr + 8) : 0;
+     const u32 alignment = runtime.GetStorageBufferAlignment();
+     struct CachedBinding {
+@@ -3016,7 +3026,8 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
+     constexpr size_t ways = 4;
+     thread_local std::array<std::array<CachedBinding, ways>, 512> binding_cache{};
+     const u32 flags =
+-        (is_written ? 1U : 0U) | (native_pointer ? 2U : 0U) | (table_pointer ? 4U : 0U);
++        (is_written ? 1U : 0U) | (native_pointer ? 2U : 0U) | (table_pointer ? 4U : 0U) |
++        (mapping_sized ? 8U : 0U);
+     const size_t owner = gpu_memory->GetID() + 1;
+     const u64 serial = gpu_memory->MapSerial();
+     auto& set = binding_cache[((gpu_addr ^ next_qword ^ flags) * 0x9E3779B97F4A7C15ULL) >> 55];
+@@ -3049,7 +3060,7 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
+             // A native (Switch 2) compute program's pointer is bare: the word after it is another
+             // parameter (a dimension, stride or texture handle), not an NVN buffer size. Taking it
+             // as one bound Fortune's Weave's DLSS input features to 266 bytes and dropped the rest.
+-            if (native_pointer) {
++            if (mapping_sized) {
+                 return (std::min)(memory_layout_size, static_cast<u32>(8_MiB));
+             }
+             const u32 packed_size = static_cast<u32>(next_qword);
+@@ -3154,4 +3165,4 @@ std::pair<typename BufferCache<P>::Buffer*, u32> BufferCache<P>::GetDrawIndirect
+                           buffer.Offset(channel_state->indirect_buffer_binding.device_addr));
+ }
+ 
+-} // namespace VideoCommon
++} // namespace VideoCommon
+\ No newline at end of file
+diff --git a/src/video_core/buffer_cache/buffer_cache_base.h b/src/video_core/buffer_cache/buffer_cache_base.h
+index 28af179d6c..c4df88e57c 100644
+--- a/src/video_core/buffer_cache/buffer_cache_base.h
++++ b/src/video_core/buffer_cache/buffer_cache_base.h
+@@ -621,7 +621,8 @@ private:
+ 
+     [[nodiscard]] Binding StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index, bool is_written,
+                                                bool native_pointer = false,
+-                                               bool table_pointer = false) const;
++                                               bool table_pointer = false,
++                                               bool mapping_sized = false) const;
+ 
+     void TraceTablePointer(bool compute, size_t stage, size_t ssbo_index, u32 cbuf_index,
+                            u32 cbuf_offset, u32 indirect_offset, GPUVAddr holder,
 diff --git a/src/video_core/framebuffer_config.h b/src/video_core/framebuffer_config.h
 index bb041cf12f..1befb2ba29 100644
 --- a/src/video_core/framebuffer_config.h
@@ -3089,10 +3171,10 @@ index da57da6917..9ce8bec55d 100644
          UNIMPLEMENTED_MSG("Unimplemented format={}", format);
          return PixelFormat::A8B8G8R8_UNORM;
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 9fac6e1e33..24980d2d03 100644
+index ff7a68584b..164acc51cc 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
-@@ -297,6 +297,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
+@@ -347,6 +347,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
          }
      }
      expected_memory = (std::min)(expected_memory, critical_memory);
@@ -3105,7 +3187,7 @@ index 9fac6e1e33..24980d2d03 100644
      if (log) {
          LOG_INFO(HW_GPU, "Texture cache thresholds: expected {} MiB, critical {} MiB, minimum {} MiB",
                   expected_memory >> 20, critical_memory >> 20, minimum_memory >> 20);
-@@ -1468,6 +1474,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
+@@ -1527,6 +1533,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
              return PixelFormat::R5G6B5_UNORM;
          case Service::android::PixelFormat::Bgra8888:
              return PixelFormat::B8G8R8A8_UNORM;

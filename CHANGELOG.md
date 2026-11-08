@@ -7,8 +7,17 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 - Ocarina of Time's recommended preset now also disables memory-operation
   synchronization and turns on NVIDIA DLSS where available (FSR 3.1 fallback).
 - New Zen 3 build target (`YUZU_BUILD_PRESET=zen3`) for Ryzen 5000-class CPUs.
+- Latest `nx2` batch: shader precache before game start (#781), split GPU
+  threads pinned to their own cores by default (#769), OoT FPS Unlock and
+  Switch 2 frame-rate limit slider (#655), non-blocking channel waits (#752),
+  fence-flagged report timing (#337), buffer read traps (#264), MKW water and
+  waves (#690), deferred-clear render passes (#699), perspective-correct
+  noperspective interpolation (#820), bounded native compute storage (#816),
+  cheaper ASTC uploads (#296), stale-image upload fixes (#818/#817), Switch 2
+  button icons (#691) and decoder/movie-clock fixes (#809).
 - The rest of the superbuild set is unchanged.
 - Windows and Linux, standard and PGO.
+
 ## v21
 
 - Ocarina of Time's water no longer flickers at Zora's River and other water; a
