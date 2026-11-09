@@ -11,7 +11,7 @@ index 99172a7f34..06f1952ee9 100644
 +SUPERBUILD.md text eol=lf
 diff --git a/.github/workflows/macos-superbuild.yml b/.github/workflows/macos-superbuild.yml
 new file mode 100644
-index 0000000000..cbeb16c754
+index 0000000000..e742ba992a
 --- /dev/null
 +++ b/.github/workflows/macos-superbuild.yml
 @@ -0,0 +1,120 @@
@@ -23,7 +23,7 @@ index 0000000000..cbeb16c754
 +      tag:
 +        description: Release tag to label the build
 +        required: true
-+        default: v28
++        default: v34
 +
 +permissions:
 +  contents: read
