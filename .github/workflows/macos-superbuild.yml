@@ -6,7 +6,7 @@ on:
       tag:
         description: Release tag to label the build
         required: true
-        default: v28
+        default: v34
 
 permissions:
   contents: read
