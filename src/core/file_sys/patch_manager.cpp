@@ -99,9 +99,23 @@ constexpr std::array DYNAMIC_FPS_RECORDS{
     BuiltinPatchRecord{0x6E6CC4, DYNAMIC_FPS_CALL, DYNAMIC_FPS_ORIGINAL},
     BuiltinPatchRecord{0x3C46200, DYNAMIC_FPS_ROUTINE, {}, true},
 };
+// The water renderer (main+0x472E0) runs its ripple simulation trunc(step) times per frame, so
+// below a step of 1 (above 60 fps) the ripples freeze. The hook at main+0x475F8 (fcvtzs w9, s0)
+// branches to an accumulator that keeps the fractional step between frames: owner (the water
+// object, u64) at state + 0x10, the carried fraction (f32) at state + 0x18.
+constexpr std::array<u8, 4> WATER_ORIGINAL{0x09, 0x00, 0x38, 0x1E};
+constexpr std::array<u8, 4> WATER_HOOK{0x22, 0xFB, 0xEF, 0x14};
+constexpr std::array<u8, 56> WATER_ACCUMULATOR{
+    0xC9, 0x92, 0x00, 0xB0, 0x29, 0x41, 0x38, 0x91, 0x2A, 0x01, 0x40, 0xF9, 0x5F, 0x01,
+    0x15, 0xEB, 0x60, 0x00, 0x00, 0x54, 0x35, 0x01, 0x00, 0xF9, 0x3F, 0x09, 0x00, 0xB9,
+    0x21, 0x09, 0x40, 0xBD, 0x00, 0x28, 0x21, 0x1E, 0x01, 0xC0, 0x25, 0x1E, 0x00, 0x38,
+    0x21, 0x1E, 0x20, 0x09, 0x00, 0xBD, 0x29, 0x00, 0x38, 0x1E, 0xD2, 0x04, 0x10, 0x17,
+};
 constexpr std::array FPS_UNLOCK_RECORDS{
     BuiltinPatchRecord{0x6E6CC4, DYNAMIC_FPS_CALL, DYNAMIC_FPS_ORIGINAL},
     BuiltinPatchRecord{0x3C46200, FPS_UNLOCK_ROUTINE, {}, true},
+    BuiltinPatchRecord{0x475F8, WATER_HOOK, WATER_ORIGINAL},
+    BuiltinPatchRecord{0x3C46280, WATER_ACCUMULATOR, {}, true},
 };
 
 constexpr std::array BUILTIN_PATCHES{
@@ -123,7 +137,7 @@ constexpr std::array BUILTIN_PATCHES{
         .build_id = "E0F3CCFAF50065AE4EA01EB5AEB13B1A45DA3348",
         .records = FPS_UNLOCK_RECORDS,
         .state_offset = 0x4E9FE00,
-        .state_size = 16,
+        .state_size = 32,
         .replaces = "Dynamic FPS by Dark (built-in)",
     },
     BuiltinPatch{
