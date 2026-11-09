@@ -57,11 +57,11 @@ endif()
 
 # Generate cpp with Git revision from template
 
-set(BUILD_AUTO_UPDATE_STABLE_REPO "callme-sy/Lichii-Superbuild")
+set(BUILD_AUTO_UPDATE_STABLE_REPO "VendavalSC/Vendichii")
 set(BUILD_AUTO_UPDATE_STABLE_API "api.github.com")
-set(BUILD_AUTO_UPDATE_API_PATH "/repos/callme-sy/Lichii-Superbuild/releases?per_page=100")
+set(BUILD_AUTO_UPDATE_API_PATH "/repos/VendavalSC/Vendichii/releases?per_page=100")
 set(BUILD_AUTO_UPDATE_WEBSITE "https://github.com")
-set(BUILD_AUTO_UPDATE_REPO "callme-sy/Lichii-Superbuild")
+set(BUILD_AUTO_UPDATE_REPO "VendavalSC/Vendichii")
 if (NIGHTLY_BUILD)
     set(REPO_NAME "Lichii Nightly")
 else()
