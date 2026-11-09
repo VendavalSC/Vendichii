@@ -473,6 +473,10 @@ private:
 
     /// Refresh the contents (pixel data) of an image
     [[nodiscard]] bool IsDownloadable(const ImageBase& image) const noexcept;
+    /// Whether the image's GPU address still leads to the memory it was made over (Donkeykong
+    /// Crazy: no write-back into memory the game has reused, Lichii #247).
+    [[nodiscard]] bool WritesBackSafely(const ImageBase& image, const char* what);
+    u64 stale_writebacks_skipped{};
 
     void RefreshContents(Image& image, ImageId image_id);
 

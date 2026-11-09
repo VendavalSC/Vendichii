@@ -151,10 +151,12 @@ void TextureCache<P>::RunGarbageCollector(bool out_of_memory) {
         aggressive_mode =
             allow_aggressive && (out_of_memory || total_used_memory >= critical_memory);
         ticks_to_destroy = aggressive_mode ? 10ULL : high_priority_mode ? 25ULL : 50ULL;
-        // EDEN_NX2_TC_MIN_AGE=<frames>: never evict images used more recently (thrash tests).
+        // EDEN_NX2_TC_MIN_AGE=<frames>: never evict images used more recently. 150 by default
+        // (El-Sashok's oot-nx2, via Donkeykong Crazy): Ocarina reuses its transient targets
+        // within that window, and evicting them made it recreate and upload them again.
         static const u64 min_age = [] {
             const char* value = std::getenv("EDEN_NX2_TC_MIN_AGE");
-            return value != nullptr ? std::strtoull(value, nullptr, 10) : 0ULL;
+            return value != nullptr ? std::strtoull(value, nullptr, 10) : 150ULL;
         }();
         ticks_to_destroy = (std::max)(ticks_to_destroy, min_age);
         num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
@@ -179,7 +181,10 @@ void TextureCache<P>::RunGarbageCollector(bool out_of_memory) {
             const auto copies = FullDownloadCopies(image.info);
             image.DownloadMemory(map, copies);
             runtime.Finish();
-            SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, map.mapped_span, swizzle_data_buffer);
+            if (WritesBackSafely(image, "evicted")) {
+                SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, map.mapped_span,
+                             swizzle_data_buffer);
+            }
             ++gc_download_deletes;
             ClearStaleImage(image);
         } else {
@@ -1248,6 +1253,52 @@ void TextureCache<P>::WriteMemory(DAddr cpu_addr, size_t size) {
 }
 
 template <class P>
+bool TextureCache<P>::WritesBackSafely(const ImageBase& image, const char* what) {
+    // An image is written back to the guest through its GPU address. Once the game has unmapped
+    // that memory and mapped other memory there, the write lands on whatever the game keeps there
+    // now. The unmap does not always reach the texture cache on Switch 2 titles: Ocarina of
+    // Time keeps images whose memory is gone (unmapped device reads at 0x1aeaf4000 on every
+    // card; the same address is written back on cards that evict there). Overwritten game data
+    // is the suspected cause of the Castle Town guard house freeze (Lichii #247), where the
+    // game's allocator lists end up overwritten. EDEN_NX2_TC_WRITEBACK_CHECK=0 skips the check.
+    static const bool check = [] {
+        const char* value = std::getenv("EDEN_NX2_TC_WRITEBACK_CHECK");
+        return value == nullptr || value[0] != '0';
+    }();
+    if (!check || gpu_memory == nullptr) {
+        return true;
+    }
+    // The GPU address must still lead to the image's device range, and memory that was there
+    // when the image was made must still be the same memory. An image made over a GPU-only
+    // region before its block had memory (blocks get memory when first written, "backed as it
+    // is written") may be written back once the block has some: the block is the region's own.
+    const std::optional<DAddr> device = gpu_memory->GpuToCpuAddress(image.gpu_addr);
+    const u8* const current = gpu_memory->GetPointer(image.gpu_addr);
+    const bool same_range = device && *device == image.cpu_addr;
+    const bool same_memory = image.guest_backing == nullptr || current == image.guest_backing;
+    if (same_range && same_memory) {
+        return true;
+    }
+    ++stale_writebacks_skipped;
+    static u32 logged{};
+    if (logged < 32) {
+        ++logged;
+        LOG_WARNING(HW_GPU,
+                    "Not writing {} image {:#x} back ({}x{}x{} format {}, {} bytes, device {:#x}): "
+                    "its GPU address now leads to {} ({} skipped so far)",
+                    what, image.gpu_addr, image.info.size.width, image.info.size.height,
+                    image.info.size.depth, static_cast<u32>(image.info.format),
+                    image.guest_size_bytes, image.cpu_addr,
+                    !device        ? std::string{"nothing"}
+                    : !same_range  ? fmt::format("device {:#x}", *device)
+                    : current == nullptr ? std::string{"no memory any more"}
+                                         : std::string{"other memory"},
+                    stale_writebacks_skipped);
+    }
+    return false;
+}
+
+template <class P>
 bool TextureCache<P>::IsDownloadable(const ImageBase& image) const noexcept {
     if (!image.IsSafeGpuCopy() || True(image.flags & (ImageFlagBits::Unbacked | ImageFlagBits::TrimmedLevels))) {
         return false;
@@ -1300,6 +1351,9 @@ void TextureCache<P>::DownloadMemory(DAddr cpu_addr, size_t size) {
         runtime.Finish();
         for (Pending& entry : pending) {
             Image& image = slot_images[entry.image_id];
+            if (!WritesBackSafely(image, "flushed")) {
+                continue;
+            }
             SwizzleImage(*gpu_memory, image.gpu_addr, image.info, entry.copies,
                          entry.map.mapped_span, swizzle_data_buffer);
             ClearStaleImage(image);
@@ -1855,7 +1909,10 @@ void TextureCache<P>::PopAsyncFlushes() {
                 download_buffer.offset -= Common::AlignUp(image.unswizzled_size_bytes, 64);
                 std::span<u8> download_span =
                     download_buffer.mapped_span.subspan(download_buffer.offset);
-                SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, download_span, swizzle_data_buffer);
+                if (WritesBackSafely(image, "downloaded")) {
+                    SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, download_span,
+                                 swizzle_data_buffer);
+                }
                 ClearStaleImage(image);
             } else {
                 const BufferDownload& buffer_info = slot_buffer_downloads[download_info.object_id];
@@ -1905,7 +1962,10 @@ void TextureCache<P>::PopAsyncFlushes() {
             }
             const ImageBase& image = download_info.GetImage(slot_images);
             const auto copies = FullDownloadCopies(image.info);
-            SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, download_span, swizzle_data_buffer);
+            if (WritesBackSafely(image, "downloaded")) {
+                SwizzleImage(*gpu_memory, image.gpu_addr, image.info, copies, download_span,
+                             swizzle_data_buffer);
+            }
             ClearStaleImage(image);
             download_map.offset += image.unswizzled_size_bytes;
             download_span = download_span.subspan(image.unswizzled_size_bytes);
@@ -3050,6 +3110,7 @@ ImageId TextureCache<P>::JoinImages(const ImageInfo& info, GPUVAddr gpu_addr, DA
         }
     }
     Image& new_image = slot_images[new_image_id];
+    new_image.guest_backing = gpu_memory->GetPointer(gpu_addr);
 
     new_image.allocation_tick = frame_tick;
     {

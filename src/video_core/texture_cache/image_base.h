@@ -128,6 +128,9 @@ struct ImageBase {
     GPUVAddr gpu_addr = 0;
     VAddr cpu_addr = 0;
     VAddr cpu_addr_end = 0;
+    /// Host memory behind gpu_addr when the image was made (null if unmapped then). Writing the
+    /// image back to the guest is only safe while gpu_addr still leads there.
+    const u8* guest_backing = nullptr;
 
     /// Set through SetModificationTick.
     u64 modification_tick = 0;
