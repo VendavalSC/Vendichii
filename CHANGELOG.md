@@ -11,9 +11,11 @@ All releases are unofficial builds. See the GitHub releases for assets and check
 - Also #965 GPU profiling diagnostics (GPU waits by zone, present/submit zones,
   spin-mutex contention), all off unless their env vars are set.
 - Based on zortos `nx2` `0b83798b`, with #874 and the full superbuild set.
-- **v32's ASTC/unswizzle and host-memory Fritchii ports were removed** after
-  reports of broken graphics on AMD; Windows high-resolution timer and updater
-  retries remain. v31 is the fallback if you still see issues.
+- Includes the selected safe Fritchii fixes: bounds-checked ASTC/unswizzle
+  stores (AMD corruption), host-memory buffers over the memory budget, the
+  Windows high-resolution waitable timer and updater download retries.
+- v32 is no longer offered; it was based on an older nx2 and some AMD users
+  reported broken graphics. v31 remains a fallback.
 - Windows and Linux, standard and PGO.
 
 ## v32

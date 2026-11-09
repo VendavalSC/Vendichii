@@ -180,10 +180,10 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..f8cbd2578a 100644
+index bc40878ce6..f7fb3cbf91 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,274 @@
+@@ -1,11 +1,276 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -202,9 +202,11 @@ index bc40878ce6..f8cbd2578a 100644
 +- Also #965 GPU profiling diagnostics (GPU waits by zone, present/submit zones,
 +  spin-mutex contention), all off unless their env vars are set.
 +- Based on zortos `nx2` `0b83798b`, with #874 and the full superbuild set.
-+- **v32's ASTC/unswizzle and host-memory Fritchii ports were removed** after
-+  reports of broken graphics on AMD; Windows high-resolution timer and updater
-+  retries remain. v31 is the fallback if you still see issues.
++- Includes the selected safe Fritchii fixes: bounds-checked ASTC/unswizzle
++  stores (AMD corruption), host-memory buffers over the memory budget, the
++  Windows high-resolution waitable timer and updater download retries.
++- v32 is no longer offered; it was based on an older nx2 and some AMD users
++  reported broken graphics. v31 remains a fallback.
 +- Windows and Linux, standard and PGO.
  
 -- Initial release candidate
@@ -1943,6 +1945,92 @@ index 7cff85d663..8301029127 100644
  )
  
  if (HAIKUOS)
+diff --git a/src/video_core/host_shaders/astc_decoder.comp b/src/video_core/host_shaders/astc_decoder.comp
+index c6d5a96d14..9266fc8a7f 100644
+--- a/src/video_core/host_shaders/astc_decoder.comp
++++ b/src/video_core/host_shaders/astc_decoder.comp
+@@ -1117,10 +1117,22 @@ int FindLayout(uint mode) {
+ }
+ 
+ 
++// The image's size: a block at the right or bottom edge of an image whose size isn't a multiple
++// of the block size reaches past it. Storing those texels anyway is undefined; on AMD they landed
++// in other images' memory (black blocks and a crosshatch in Ocarina of Time on an RX 6750 XT, and
++// at last a GPU fault on an invalid write), where NVIDIA dropped them.
++ivec3 image_extent;
++
++void StoreTexel(ivec3 texel, vec4 value) {
++    if (all(lessThan(texel.xy, image_extent.xy))) {
++        imageStore(dest_image, texel, value);
++    }
++}
++
+ void FillError(ivec3 coord) {
+     for (uint j = 0; j < block_dims.y; j++) {
+         for (uint i = 0; i < block_dims.x; i++) {
+-            imageStore(dest_image, coord + ivec3(i, j, 0), vec4(0.0, 0.0, 0.0, 0.0));
++            StoreTexel(coord + ivec3(i, j, 0), vec4(0.0, 0.0, 0.0, 0.0));
+         }
+     }
+ }
+@@ -1137,7 +1149,7 @@ void FillVoidExtentLDR(ivec3 coord) {
+     const float b = float(b_u) / 65535.0f;
+     for (uint j = 0; j < block_dims.y; j++) {
+         for (uint i = 0; i < block_dims.x; i++) {
+-            imageStore(dest_image, coord + ivec3(i, j, 0), vec4(r, g, b, a));
++            StoreTexel(coord + ivec3(i, j, 0), vec4(r, g, b, a));
+         }
+     }
+ }
+@@ -1417,7 +1429,7 @@ void DecompressBlock(ivec3 coord) {
+                 p = Cf / 65535.0f;
+             }
+ 
+-            imageStore(dest_image, coord + ivec3(i, j, 0), clamp(p, 0.0f, 1.0f).gbar);
++            StoreTexel(coord + ivec3(i, j, 0), clamp(p, 0.0f, 1.0f).gbar);
+         }
+     }
+ }
+@@ -1449,7 +1461,8 @@ void main() {
+     offset += swizzle;
+ 
+     const ivec3 coord = ivec3(gl_GlobalInvocationID * uvec3(block_dims, 1));
+-    if (any(greaterThanEqual(coord, imageSize(dest_image)))) {
++    image_extent = imageSize(dest_image);
++    if (any(greaterThanEqual(coord, image_extent))) {
+         return;
+     }
+     local_buff = astc_data[offset / 16];
+diff --git a/src/video_core/host_shaders/block_linear_unswizzle_2d.comp b/src/video_core/host_shaders/block_linear_unswizzle_2d.comp
+index bbe73acd1a..5f2d11d18e 100644
+--- a/src/video_core/host_shaders/block_linear_unswizzle_2d.comp
++++ b/src/video_core/host_shaders/block_linear_unswizzle_2d.comp
+@@ -127,5 +127,10 @@ void main() {
+ 
+     const uvec4 texel = ReadTexel(offset);
+     const ivec3 coord = ivec3(gl_GlobalInvocationID) + destination;
++    // Workgroups round the dispatch up past the image; on AMD a store outside it lands in other
++    // memory (see astc_decoder.comp).
++    if (any(greaterThanEqual(coord, imageSize(output_image)))) {
++        return;
++    }
+     imageStore(output_image, coord, texel);
+ }
+diff --git a/src/video_core/host_shaders/block_linear_unswizzle_3d.comp b/src/video_core/host_shaders/block_linear_unswizzle_3d.comp
+index 8dfaf0cd1a..9df13369c2 100644
+--- a/src/video_core/host_shaders/block_linear_unswizzle_3d.comp
++++ b/src/video_core/host_shaders/block_linear_unswizzle_3d.comp
+@@ -130,5 +130,10 @@ void main() {
+ 
+     const uvec4 texel = ReadTexel(offset);
+     const ivec3 coord = ivec3(gl_GlobalInvocationID) + destination;
++    // Workgroups round the dispatch up past the image; on AMD a store outside it lands in other
++    // memory (see astc_decoder.comp).
++    if (any(greaterThanEqual(coord, imageSize(output_image)))) {
++        return;
++    }
+     imageStore(output_image, coord, texel);
+ }
 diff --git a/src/video_core/host_shaders/ocarina_dlss_bias.comp b/src/video_core/host_shaders/ocarina_dlss_bias.comp
 new file mode 100644
 index 0000000000..ecb4c98b66
@@ -2010,6 +2098,21 @@ index 0000000000..e95883e377
 +    vec3 change = abs(after - before);
 +    imageStore(effects, pixel, vec4(smoothstep(0.02, 0.08, max(change.r, max(change.g, change.b)))));
 +}
+diff --git a/src/video_core/host_shaders/pitch_unswizzle.comp b/src/video_core/host_shaders/pitch_unswizzle.comp
+index 7d23f594c7..49196f21ee 100644
+--- a/src/video_core/host_shaders/pitch_unswizzle.comp
++++ b/src/video_core/host_shaders/pitch_unswizzle.comp
+@@ -81,5 +81,10 @@ void main() {
+ 
+     const uvec4 texel = ReadTexel(offset);
+     const ivec2 coord = ivec2(gl_GlobalInvocationID.xy) + destination;
++    // Workgroups round the dispatch up past the image; on AMD a store outside it lands in other
++    // memory (see astc_decoder.comp).
++    if (any(greaterThanEqual(coord, imageSize(output_image)))) {
++        return;
++    }
+     imageStore(output_image, coord, texel);
+ }
 diff --git a/src/video_core/nx2.h b/src/video_core/nx2.h
 index 0913a55641..6448f311a6 100644
 --- a/src/video_core/nx2.h
@@ -3012,6 +3115,47 @@ index b3f5708312..3bc1576419 100644
      std::jthread worker_thread;
  
      std::chrono::steady_clock::duration frame_interval{};
+diff --git a/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp b/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
+index ffcf9e441b..9434e1ae39 100644
+--- a/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
++++ b/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
+@@ -15,6 +15,7 @@
+ #include "common/bit_util.h"
+ #include "common/common_types.h"
+ #include "common/literals.h"
++#include "common/logging.h"
+ #include "video_core/renderer_vulkan/vk_scheduler.h"
+ #include "video_core/renderer_vulkan/vk_staging_buffer_pool.h"
+ #include "video_core/vulkan_common/vulkan_device.h"
+@@ -243,7 +244,27 @@ StagingBufferRef StagingBufferPool::CreateStagingBuffer(size_t size, MemoryUsage
+     if (device.IsBufferDeviceAddressSupported()) {
+         buffer_ci.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+     }
+-    vk::Buffer buffer = memory_allocator.CreateBuffer(buffer_ci, usage);
++    vk::Buffer buffer;
++    try {
++        buffer = memory_allocator.CreateBuffer(buffer_ci, usage);
++    } catch (const vk::Exception& e) {
++        // Out of memory: free every idle staging buffer and try once more.
++        size_t freed = 0;
++        for (StagingBuffersCache* cache : {&device_local_cache, &upload_cache, &download_cache}) {
++            for (StagingBuffers& level : *cache) {
++                const size_t before = level.entries.size();
++                std::erase_if(level.entries, [this](const StagingBuffer& entry) {
++                    return !entry.deferred && scheduler.IsFree(entry.tick);
++                });
++                freed += before - level.entries.size();
++                level.iterate_index = 0;
++                level.delete_index = 0;
++            }
++        }
++        LOG_WARNING(Render_Vulkan, "Staging buffer of {} MiB could not be made ({}); freed {} idle "
++                    "staging buffers and retrying", buffer_ci.size >> 20, e.what(), freed);
++        buffer = memory_allocator.CreateBuffer(buffer_ci, usage);
++    }
+     if (device.HasDebuggingToolAttached()) {
+         ++buffer_index;
+         buffer.SetObjectNameEXT(fmt::format("Staging Buffer {}", buffer_index).c_str());
 diff --git a/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp b/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp
 index 79101754f7..d7afa6dae4 100644
 --- a/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp
@@ -3415,6 +3559,34 @@ index 3ab924e37f..4321f9b83f 100644
      }
      // Probe optional extensions against the same snapshot the caller verifies against, so the
      // check here and the verification in CreateInstance can never disagree (see TOCTOU note below).
+diff --git a/src/video_core/vulkan_common/vulkan_memory_allocator.cpp b/src/video_core/vulkan_common/vulkan_memory_allocator.cpp
+index eb129f4a43..863c621df0 100644
+--- a/src/video_core/vulkan_common/vulkan_memory_allocator.cpp
++++ b/src/video_core/vulkan_common/vulkan_memory_allocator.cpp
+@@ -458,7 +458,22 @@ vk::Buffer MemoryAllocator::CreateBuffer(const VkBufferCreateInfo &ci, MemoryUsa
+     VkMemoryPropertyFlags property_flags{};
+ 
+     if (!CreateBufferInSeparatePool(ci, usage, alloc_ci, handle, allocation, alloc_info)) {
+-        vk::Check(vmaCreateBuffer(allocator, &ci, &alloc_ci, &handle, &allocation, &alloc_info));
++        VkResult result = vmaCreateBuffer(allocator, &ci, &alloc_ci, &handle, &allocation,
++                                          &alloc_info);
++        // Staging buffers live in system memory, where the budget is the OS's soft hint: going
++        // over it pages, refusing aborted the emulator (a texture upload in Ocarina's town
++        // square after 36 minutes). Device-local buffers keep the budget.
++        if ((result == VK_ERROR_OUT_OF_DEVICE_MEMORY || result == VK_ERROR_OUT_OF_HOST_MEMORY) &&
++            usage != MemoryUsage::DeviceLocal) {
++            VmaAllocationCreateInfo over_budget = alloc_ci;
++            over_budget.flags &= ~VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;
++            result = vmaCreateBuffer(allocator, &ci, &over_budget, &handle, &allocation,
++                                     &alloc_info);
++            LOG_WARNING(Render_Vulkan,
++                        "Buffer of {} KiB (usage {}) over the memory budget: {}", ci.size >> 10,
++                        static_cast<u32>(usage), result == VK_SUCCESS ? "made anyway" : "failed");
++        }
++        vk::Check(result);
+     }
+     vmaGetAllocationMemoryProperties(allocator, allocation, &property_flags);
+ 
 diff --git a/src/yuzu/configuration/configure_graphics.cpp b/src/yuzu/configuration/configure_graphics.cpp
 index 30d387fb31..d27baf4774 100644
 --- a/src/yuzu/configuration/configure_graphics.cpp
