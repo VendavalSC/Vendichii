@@ -2,14 +2,18 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
-## v33
+## v34
 
-- Based on zortos `nx2` `0b83798b`: #1028 async read-back — the reading thread
-  waits for its downloads, measured at OoT Kokiri 28.2 -> 32.9 fps (+17%) with
-  p90 frame time 38.0 -> 32.8 ms on 5900X + RTX 3080; and #965 GPU profiling
-  diagnostics (GPU waits by zone, present/submit zones, spin-mutex contention).
-- Keeps #874 payload-release fix and the full v32 feature set, including the
-  selected safe Fritchii ports.
+- **Big frame-rate gain.** #1028 async read-back measured at Ocarina of Time
+  Kokiri Forest 28.2 -> 32.9 fps (+17%), p90 frame time 38.0 -> 32.8 ms on a
+  5900X + RTX 3080; combined with the #874 payload-release fix from v29, OoT
+  gains roughly 12 fps over builds without it.
+- Also #965 GPU profiling diagnostics (GPU waits by zone, present/submit zones,
+  spin-mutex contention), all off unless their env vars are set.
+- Based on zortos `nx2` `0b83798b`, with #874 and the full superbuild set.
+- **v32's ASTC/unswizzle and host-memory Fritchii ports were removed** after
+  reports of broken graphics on AMD; Windows high-resolution timer and updater
+  retries remain. v31 is the fallback if you still see issues.
 - Windows and Linux, standard and PGO.
 
 ## v32

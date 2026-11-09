@@ -1,8 +1,8 @@
 # Lichii Superbuild (unofficial)
 
-> ## ✅ v33 recommended
+> ## ✅ v34 recommended
 >
-> v33 is based on zortos `nx2` `0b83798b` (async read-back #1028), includes #874 and selected safe Fritchii fixes, and is the current recommended release. v32/v31/v30/v29/v28/v24 remain fallbacks.
+> v34 is based on zortos `nx2` `0b83798b` (async read-back #1028) and includes #874. v32 was removed for AMD graphics issues; v31/v30/v29/v28/v24 remain fallbacks.
 
 ## Credits
 
