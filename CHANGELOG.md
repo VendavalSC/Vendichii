@@ -2,6 +2,31 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v38
+
+- **Big frame-rate gain.** Two OoT split-GPU-thread changes by jpkto, the
+  author of #1028 and #1056, on top of everything v37 has:
+  - **Command lists wait only for the words GPU work wrote (#1094).** The
+    split's front spent 93-156 ms of every second in Hyrule Field
+    (169-204 waits, 550-765 us each) waiting for the copy of a whole 4 KiB
+    command-list page; at Death Mountain it was ~196 ms a second in ~270
+    waits, leaving the front about 14 ms idle. The page now tracks exactly
+    which words GPU work wrote, so a list elsewhere on the page reads guest
+    memory and waits for nothing, and a list on some words takes only those.
+    Also fixes `DMAClear` checking a quarter of its range, and a
+    `DMACopy`/`DMAClear` case that left the page's copy stale.
+  - **3D state registers written in one call (#1095).** The back writes about
+    5 million 3D registers a second in OoT, about half of them state
+    registers; each went through three out-of-line calls. The hot path now
+    writes them in place, with every other method taking the old route.
+- Full v37 feature set: #1061 FSR jitter, #1079 texture-cache joins, #1062
+  FSR 4, #1056 back macros, #1060 OoT FSR 3.1, shader cache v2 #1036,
+  async read-back #1028, #874, native HDR, DLSS presets E/F, the safe
+  Fritchii ports and the optional white-flash mitigation.
+- **Note:** #1094 and #1095 are open upstream PRs, merged here ahead of
+  upstream at the maintainers' request; both are jpkto's and carry tests.
+- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
+
 ## v37
 
 - Based on latest zortos `nx2` `7afad5494e`, three safe merged changes on top of

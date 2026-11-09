@@ -17,9 +17,9 @@
 
 # Lichii
 
-> ## ✅ v37 recommended
+> ## ✅ v38 recommended
 >
-> v37 includes the #874 payload-release fix, based on zortos `nx2` `7afad5494e` with OoT FSR jitter and FSR 4, the texture-cache join skip, and v36's back-macro speedup and OoT FSR 3.1. v32 was removed for AMD graphics issues; v36, v35, v34, v31, v30, v29, v28 and v24 remain available as fallbacks.
+> v38 includes the #874 payload-release fix, based on zortos `nx2` `7afad5494e` plus jpkto's #1094 and #1095 OoT speedups, with FSR jitter, FSR 4, the texture-cache join skip, the back-macro speedup and OoT FSR 3.1. v32 was removed for AMD graphics issues; v37, v36, v35, v34, v31, v30, v29, v28 and v24 remain available as fallbacks.
 
 > **Unofficial superbuild fork.** This repository is not official Lichii and is
 > not affiliated with zortos293. It carries a curated set of performance and

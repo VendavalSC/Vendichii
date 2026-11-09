@@ -180,10 +180,10 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..498e2b0976 100644
+index bc40878ce6..1451fff05c 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,326 @@
+@@ -1,11 +1,351 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -192,9 +192,35 @@ index bc40878ce6..498e2b0976 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v37
++## v38
  
 -## [0.1.0]
++- **Big frame-rate gain.** Two OoT split-GPU-thread changes by jpkto, the
++  author of #1028 and #1056, on top of everything v37 has:
++  - **Command lists wait only for the words GPU work wrote (#1094).** The
++    split's front spent 93-156 ms of every second in Hyrule Field
++    (169-204 waits, 550-765 us each) waiting for the copy of a whole 4 KiB
++    command-list page; at Death Mountain it was ~196 ms a second in ~270
++    waits, leaving the front about 14 ms idle. The page now tracks exactly
++    which words GPU work wrote, so a list elsewhere on the page reads guest
++    memory and waits for nothing, and a list on some words takes only those.
++    Also fixes `DMAClear` checking a quarter of its range, and a
++    `DMACopy`/`DMAClear` case that left the page's copy stale.
++  - **3D state registers written in one call (#1095).** The back writes about
++    5 million 3D registers a second in OoT, about half of them state
++    registers; each went through three out-of-line calls. The hot path now
++    writes them in place, with every other method taking the old route.
++- Full v37 feature set: #1061 FSR jitter, #1079 texture-cache joins, #1062
++  FSR 4, #1056 back macros, #1060 OoT FSR 3.1, shader cache v2 #1036,
++  async read-back #1028, #874, native HDR, DLSS presets E/F, the safe
++  Fritchii ports and the optional white-flash mitigation.
++- **Note:** #1094 and #1095 are open upstream PRs, merged here ahead of
++  upstream at the maintainers' request; both are jpkto's and carry tests.
++- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
+ 
+-- Initial release candidate
++## v37
++
 +- Based on latest zortos `nx2` `7afad5494e`, three safe merged changes on top of
 +  v36: **OoT FSR jitter and texture LOD bias (#1061)** — sub-pixel camera jitter
 +  so FSR gets real sub-pixel detail instead of sampling the same position every
@@ -207,8 +233,7 @@ index bc40878ce6..498e2b0976 100644
 +  native HDR, DLSS presets E/F, the safe Fritchii ports and the optional
 +  `EDEN_NX2_FENCE_FLUSH_US=0` white-flash mitigation.
 +- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
- 
--- Initial release candidate
++
 +## v36
 +
 +- **Big frame-rate gain.** #1056 runs the macros that read memory on the split's
@@ -652,16 +677,16 @@ index 0000000000..a0496b95b6
 +expose the port to a network. Dumps and captures can contain game assets; keep
 +them local and do not upload `.rdc` captures or dumps publicly.
 diff --git a/README.md b/README.md
-index 9230cf33b0..632b71143f 100644
+index 9230cf33b0..451eb4fdd7 100644
 --- a/README.md
 +++ b/README.md
 @@ -17,6 +17,16 @@
  
  # Lichii
  
-+> ## ✅ v37 recommended
++> ## ✅ v38 recommended
 +>
-+> v37 includes the #874 payload-release fix, based on zortos `nx2` `7afad5494e` with OoT FSR jitter and FSR 4, the texture-cache join skip, and v36's back-macro speedup and OoT FSR 3.1. v32 was removed for AMD graphics issues; v36, v35, v34, v31, v30, v29, v28 and v24 remain available as fallbacks.
++> v38 includes the #874 payload-release fix, based on zortos `nx2` `7afad5494e` plus jpkto's #1094 and #1095 OoT speedups, with FSR jitter, FSR 4, the texture-cache join skip, the back-macro speedup and OoT FSR 3.1. v32 was removed for AMD graphics issues; v37, v36, v35, v34, v31, v30, v29, v28 and v24 remain available as fallbacks.
 +
 +> **Unofficial superbuild fork.** This repository is not official Lichii and is
 +> not affiliated with zortos293. It carries a curated set of performance and
@@ -674,15 +699,15 @@ index 9230cf33b0..632b71143f 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..760d7fa8b0
+index 0000000000..6a19a1db27
 --- /dev/null
 +++ b/SUPERBUILD.md
 @@ -0,0 +1,215 @@
 +# Lichii Superbuild (unofficial)
 +
-+> ## ✅ v37 recommended
++> ## ✅ v38 recommended
 +>
-+> v37 is based on zortos `nx2` `7afad5494e` (#1061 FSR jitter, #1079 texture-cache joins, #1062 FSR 4, plus v36's #1056 back macros, #1060 FSR 3.1, #1036 shader cache v2 and #1028 async read-back) and includes #874. v32 was removed for AMD graphics issues; v36/v35/v34/v31/v30/v29/v28/v24 remain fallbacks.
++> v38 is based on zortos `nx2` `7afad5494e` plus jpkto's open PRs #1094 and #1095 (command-list waits and state-register writes), with #1061 FSR jitter, #1079 texture-cache joins, #1062 FSR 4, #1056 back macros, #1060 FSR 3.1, #1036 shader cache v2, #1028 async read-back and #874. v32 was removed for AMD graphics issues; v37/v36/v35/v34/v31/v30/v29/v28/v24 remain fallbacks.
 +
 +## Credits
 +
@@ -1711,6 +1736,172 @@ index 66528c1ebe..9e81a4cc4c 100644
  TEST_CASE("Native image base alignment does not shrink tile geometry", "[nx2_image_layout]") {
      auto preference = ColorPreference;
      preference[4] = 8;
+diff --git a/src/tests/video_core/buffer_cache_ports.cpp b/src/tests/video_core/buffer_cache_ports.cpp
+index 4971aff31c..a6de32a37c 100644
+--- a/src/tests/video_core/buffer_cache_ports.cpp
++++ b/src/tests/video_core/buffer_cache_ports.cpp
+@@ -355,6 +355,13 @@ struct BufferCacheTestAccess {
+     static void MarkWritten(Cache& cache, BufferId id, DAddr address, u32 size) {
+         cache.MarkWrittenBuffer(id, address, size);
+     }
++    /// A dispatch or copy wrote [address, address + size) of buffer `id` (Nx2NoteListWrite).
++    static void ListWrite(Cache& cache, BufferId id, DAddr address, u64 size) {
++        cache.Nx2NoteListWrite(id, address, size);
++    }
++    static void UseGpuMemory(Cache& cache, Tegra::MemoryManager& memory) {
++        cache.gpu_memory = &memory;
++    }
+     static size_t ReadDownloads(Cache& cache) {
+         return cache.read_downloads.size();
+     }
+@@ -813,6 +820,147 @@ TEST_CASE("Command page readers remain ordered during batch completion", "[buffe
+     REQUIRE(f.runtime.downloads == 1);
+ }
+ 
++namespace {
++
++/// Makes `page` a command list page for one test (nx2.h keeps them for the session).
++struct ListPage {
++    explicit ListPage(DAddr page) {
++        Tegra::Nx2ClearGpuWrittenPages();
++        Tegra::Nx2MarkCommandListPage(page);
++    }
++    ~ListPage() {
++        Tegra::Nx2ClearGpuWrittenPages();
++    }
++    ListPage(const ListPage&) = delete;
++    ListPage& operator=(const ListPage&) = delete;
++};
++
++bool AllBytes(std::span<const u8> bytes, u8 value) {
++    return std::ranges::all_of(bytes, [value](u8 byte) { return byte == value; });
++}
++
++} // namespace
++
++TEST_CASE("Command lists on words no GPU work wrote read guest memory, not the page's copy",
++          "[buffer_ports]") {
++    Fixture f;
++    const ListPage list_page{0x20000};
++    const auto id = Access::Add(*f.cache, 0x20000, 0x10000);
++    std::ranges::fill(Access::Get(*f.cache, id).bytes, 0x77);
++    std::memset(f.bytes + 0x10000, 0x11, 0x1000);
++    // The page's first list drained the split and flushed the page (FlushGpuWrittenCommands).
++    f.cache->Nx2NoteListSynced(0x20000);
++    // A dispatch writes bytes 0x800-0x900 of the page; the copy taken after it is on its way.
++    f.cache->Nx2CollectListCopies(true);
++    Access::ListWrite(*f.cache, id, 0x20800, 0x100);
++    REQUIRE(f.cache->Nx2CopyListPages(f.runtime.CurrentTick()));
++    f.cache->Nx2CollectListCopies(false);
++    using Read = Cache::Nx2ListRead;
++    std::array<u8, 16> list{};
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20100, list, true) == Read::Synced);
++    REQUIRE(f.cache->Nx2ReadListCopy(0x207f0, list, true) == Read::Synced);
++    // The GPU completes the copy. A list on the dispatch's words reads them from it; one that
++    // starts before them reads its other words from guest memory.
++    f.runtime.Finish();
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20800, list, true) == Read::Copied);
++    REQUIRE(AllBytes(list, 0x77));
++    std::array<u8, 32> spanning{};
++    REQUIRE(f.cache->Nx2ReadListCopy(0x207f0, spanning, true) == Read::Copied);
++    REQUIRE(AllBytes(std::span{spanning}.first(16), 0x11));
++    REQUIRE(AllBytes(std::span{spanning}.last(16), 0x77));
++}
++
++TEST_CASE("Command list pages the front has not flushed read every word from the copy",
++          "[buffer_ports]") {
++    Fixture f;
++    const ListPage list_page{0x20000};
++    const auto id = Access::Add(*f.cache, 0x20000, 0x10000);
++    std::ranges::fill(Access::Get(*f.cache, id).bytes, 0x77);
++    std::memset(f.bytes + 0x10000, 0x11, 0x1000);
++    // GPU work may have written the page before it became a command list page: only the first
++    // write since is noted, and guest memory need not hold the rest.
++    f.cache->Nx2CollectListCopies(true);
++    Access::ListWrite(*f.cache, id, 0x20800, 0x100);
++    REQUIRE(f.cache->Nx2CopyListPages(f.runtime.CurrentTick()));
++    f.cache->Nx2CollectListCopies(false);
++    f.runtime.Finish();
++    std::array<u8, 32> list{};
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20100, list, true) == Cache::Nx2ListRead::Copied);
++    REQUIRE(AllBytes(list, 0x77));
++    REQUIRE(f.cache->Nx2ReadListCopy(0x207f0, list, true) == Cache::Nx2ListRead::Copied);
++    REQUIRE(AllBytes(list, 0x77));
++}
++
++TEST_CASE("Host writes give command list words back to guest memory and retire the page's copy",
++          "[buffer_ports]") {
++    Fixture f;
++    const ListPage list_page{0x20000};
++    const auto id = Access::Add(*f.cache, 0x20000, 0x10000);
++    f.cache->Nx2NoteListSynced(0x20000);
++    f.cache->Nx2CollectListCopies(true);
++    Access::ListWrite(*f.cache, id, 0x20800, 0x100);
++    REQUIRE(f.cache->Nx2CopyListPages(f.runtime.CurrentTick()));
++    f.cache->Nx2CollectListCopies(false);
++    f.runtime.Finish();
++    using Read = Cache::Nx2ListRead;
++    std::array<u8, 16> list{};
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20840, list, true) == Read::Copied);
++    // The CPU, an inline upload or a copy of bytes guest memory holds writes 0x800-0x840 whole,
++    // and two bytes of each of the words at 0x880 and 0x884.
++    f.cache->Nx2NoteListHostWrite(0x20800, 0x40);
++    f.cache->Nx2NoteListHostWrite(0x20882, 4);
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20800, list, true) == Read::Synced);
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20830, list, true) == Read::Synced);
++    // GPU-written words it did not write whole: the copy no longer holds the page.
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20840, list, true) == Read::Unknown);
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20880, list, true) == Read::Unknown);
++}
++
++TEST_CASE("A flushed command list page reads guest memory until GPU work writes it again",
++          "[buffer_ports]") {
++    Fixture f;
++    const ListPage list_page{0x20000};
++    const auto id = Access::Add(*f.cache, 0x20000, 0x10000);
++    f.cache->Nx2CollectListCopies(true);
++    Access::ListWrite(*f.cache, id, 0x20000, 0x1000);
++    REQUIRE(f.cache->Nx2CopyListPages(f.runtime.CurrentTick()));
++    using Read = Cache::Nx2ListRead;
++    std::array<u8, 16> list{};
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20800, list, true) == Read::Copied);
++    // The front drained the split and flushed the page (DmaPusher::FlushGpuWrittenCommands).
++    f.cache->Nx2NoteListSynced(0x20000);
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20800, list, true) == Read::Synced);
++    Access::ListWrite(*f.cache, id, 0x20900, 0x40);
++    REQUIRE(f.cache->Nx2CopyListPages(f.runtime.CurrentTick()));
++    f.cache->Nx2CollectListCopies(false);
++    f.runtime.Finish();
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20800, list, true) == Read::Synced);
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20900, list, true) == Read::Copied);
++}
++
++TEST_CASE("Copy engine clears give command list words back to guest memory", "[buffer_ports]") {
++    Fixture f;
++    const ListPage list_page{0x20000};
++    const auto id = Access::Add(*f.cache, 0x20000, 0x10000);
++    Tegra::MemoryManager gpu_memory{f.system, f.device, 32, 1ULL << 31, 16};
++    gpu_memory.BindRasterizer(&f.rasterizer);
++    gpu_memory.Map(0x200000, 0x20000, 0x10000, Tegra::PTEKind::PITCH, true);
++    Access::UseGpuMemory(*f.cache, gpu_memory);
++    f.cache->Nx2NoteListSynced(0x20000);
++    f.cache->Nx2CollectListCopies(true);
++    Access::ListWrite(*f.cache, id, 0x20800, 0x100);
++    REQUIRE(f.cache->Nx2CopyListPages(f.runtime.CurrentTick()));
++    f.cache->Nx2CollectListCopies(false);
++    f.runtime.Finish();
++    // 16 words cleared (MaxwellDMA's remapped constant fill writes them to guest memory too).
++    REQUIRE(f.cache->DMAClear(0x200800, 16, 0));
++    REQUIRE(AllBytes(std::span{Access::Get(*f.cache, id).bytes}.subspan(0x800, 0x40), 0));
++    using Read = Cache::Nx2ListRead;
++    std::array<u8, 16> list{};
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20830, list, true) == Read::Synced);
++    REQUIRE(f.cache->Nx2ReadListCopy(0x20840, list, true) == Read::Unknown);
++}
++
+ TEST_CASE("Native uniform banks upload directly without overwriting GPU-owned bytes",
+           "[buffer_ports]") {
+     Fixture f;
 diff --git a/src/tests/video_core/nx2_written_pages.cpp b/src/tests/video_core/nx2_written_pages.cpp
 new file mode 100644
 index 0000000000..45c283667c
@@ -1836,10 +2027,42 @@ index 53cb647da1..1c41d93554 100644
      "NVIDIA Streamline SDK directory for its headers (empty: download them)")
  if (ENABLE_NVIDIA_DLSS)
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index dcb049da8b..e4c422731b 100644
+index dcb049da8b..4ad8bdccb0 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
-@@ -1793,7 +1793,9 @@ bool BufferCache<P>::BindGraphicsStorageBuffer(size_t stage, size_t ssbo_index,
+@@ -1440,6 +1440,11 @@ bool BufferCache<P>::DMACopy(GPUVAddr src_address, GPUVAddr dest_address, u64 am
+         .size = amount,
+     }};
+ 
++    // Guest memory gets the copy below, which holds every byte the source has in guest memory:
++    // command list pages in the destination read those from it, and their copies are stale. The
++    // bytes copied from GPU-written source ranges are noted as GPU writes after this.
++    Nx2NoteListHostWrite(*cpu_dest_address, amount);
++
+     boost::container::small_vector<std::pair<DAddr, size_t>, 4> tmp_intervals;
+     auto mirror = [&](DAddr base_address, DAddr base_address_end) {
+         const u64 size = base_address_end - base_address;
+@@ -1485,14 +1490,17 @@ bool BufferCache<P>::DMAClear(GPUVAddr dst_address, u64 amount, u32 value) {
+     if (!cpu_dst_address) {
+         return false;
+     }
+-    const bool dest_dirty = IsRegionRegistered(*cpu_dst_address, amount);
++    // `amount` counts words.
++    const size_t size = amount * sizeof(u32);
++    const bool dest_dirty = IsRegionRegistered(*cpu_dst_address, size);
+     if (!dest_dirty) {
+         return false;
+     }
+ 
+-    const size_t size = amount * sizeof(u32);
+     ClearDownload(*cpu_dst_address, size);
+     gpu_modified_ranges.Subtract(*cpu_dst_address, size);
++    // As an inline write: command list pages read the cleared words from guest memory.
++    Nx2NoteListHostWrite(*cpu_dst_address, size);
+ 
+     const BufferId buffer = FindBuffer(*cpu_dst_address, static_cast<u32>(size), false);
+     Buffer& dest_buffer = slot_buffers[buffer];
+@@ -1793,7 +1801,9 @@ bool BufferCache<P>::BindGraphicsStorageBuffer(size_t stage, size_t ssbo_index,
          StorageBufferBinding(ssbo_addr, cbuf_index, is_written,
                               maxwell3d->GetNativeMacroEngine().native_turing ||
                                   indirect_offset != ~0U,
@@ -1850,7 +2073,7 @@ index dcb049da8b..e4c422731b 100644
      if (indirect_offset != ~0U) {
          TraceTablePointer(false, stage, ssbo_index, cbuf_index, cbuf_offset, indirect_offset, holder,
                            channel_state->storage_buffers[stage][ssbo_index]);
-@@ -2522,6 +2524,7 @@ void BufferCache<P>::BindHostGraphicsUniformBuffer(size_t stage, u32 index, u32
+@@ -2522,6 +2532,7 @@ void BufferCache<P>::BindHostGraphicsUniformBuffer(size_t stage, u32 index, u32
      // Native programs keep tables next to their code in a 64 KiB bank read with indirect offsets
      // (Splatoon Raiders: the dialogue box corners in c1). Writes to that memory can go unnoticed by
      // the memory tracker, leaving stale host contents, so upload such a bank again once per frame.
@@ -1858,7 +2081,145 @@ index dcb049da8b..e4c422731b 100644
      if (has_host_buffer && (*channel_state->uniform_buffer_sizes)[stage][index] == 0x10000 &&
          size != 0 && gpu_memory != nullptr && gpu_memory->UsesNativeTiling() &&
          (Nx2Perf::Verify() || !native_indirect_uniforms_this_frame.contains(device_addr)) &&
-@@ -4150,14 +4153,15 @@ void BufferCache<P>::TraceTablePointer(bool compute, size_t stage, size_t ssbo_i
+@@ -3242,6 +3253,11 @@ void BufferCache<P>::Nx2NoteListWrite(BufferId buffer_id, DAddr device_addr, u64
+                     std::scoped_lock lock{nx2_list_mutex};
+                     Nx2ListPage& entry = nx2_list_pages[page_addr];
+                     ++entry.writes;
++                    Nx2MarkListWords(
++                        entry, (std::max)(device_addr, page_addr) - page_addr,
++                        (std::min)(device_addr + size, page_addr + (DAddr{1} << page_bits)) -
++                            page_addr,
++                        true);
+                     if (!nx2_collect_list_copies && !entry.draw_written) {
+                         entry.draw_written = true;
+                         LOG_INFO(HW_GPU, "Command list page {:#x} is written by draws too: its "
+@@ -3355,8 +3371,11 @@ auto BufferCache<P>::Nx2ReadListCopy(DAddr device_addr, std::span<u8> out, bool
+                 return entry.synced_writes == entry.writes ? Nx2ListRead::Synced
+                                                            : Nx2ListRead::Unknown;
+             }
+-            // Pages the CPU writes the lists of (GPU-written once, long before) stay synced.
+-            if (entry.synced_writes == entry.writes) {
++            // Pages the CPU writes the lists of (GPU-written once, long before) stay synced, and
++            // a list on none of the words GPU work wrote since the page was flushed is in guest
++            // memory too: it waits for no copy.
++            if (entry.synced_writes == entry.writes ||
++                (entry.flushed && !Nx2HasListWords(entry, offset, offset + out.size()))) {
+                 return Nx2ListRead::Synced;
+             }
+             if (!current(entry)) {
+@@ -3364,7 +3383,7 @@ auto BufferCache<P>::Nx2ReadListCopy(DAddr device_addr, std::span<u8> out, bool
+             }
+             // The lists after the first of a batch find the copy done: read it at once.
+             if (runtime.IsFree(entry.copy_tick)) {
+-                std::memcpy(out.data(), entry.copy->mapped_span.data() + offset, out.size());
++                Nx2ReadListWords(entry, device_addr, offset, out);
+                 return Nx2ListRead::Copied;
+             }
+             tick = entry.copy_tick;
+@@ -3382,17 +3401,71 @@ auto BufferCache<P>::Nx2ReadListCopy(DAddr device_addr, std::span<u8> out, bool
+             it->second.copy_writes != writes) {
+             return Nx2ListRead::Unknown;
+         }
+-        std::memcpy(out.data(), it->second.copy->mapped_span.data() + offset, out.size());
++        Nx2ReadListWords(it->second, device_addr, offset, out);
+         return Nx2ListRead::Copied;
+     }
+ }
+ 
++template <class P>
++void BufferCache<P>::Nx2ReadListWords(const Nx2ListPage& entry, DAddr device_addr, u64 offset,
++                                      std::span<u8> out) {
++    if constexpr (!IS_OPENGL) {
++        // The copy holds the words GPU work wrote. Guest memory holds the others once the page
++        // was flushed: the host wrote them, and the buffer the copy came from need not have had
++        // those writes uploaded.
++        const u8* const copy = entry.copy->mapped_span.data();
++        const u64 end = offset + out.size();
++        bool all_gpu = true;
++        for (u64 word = offset / 4; word < (end + 3) / 4 && all_gpu; ++word) {
++            all_gpu = entry.gpu_words.test(static_cast<size_t>(word));
++        }
++        if (all_gpu || !entry.flushed) {
++            std::memcpy(out.data(), copy + offset, out.size());
++            return;
++        }
++        device_memory.ReadBlockUnsafe(device_addr, out.data(), out.size());
++        for (u64 byte = offset; byte < end;) {
++            const u64 next = (std::min)((byte / 4 + 1) * 4, end);
++            if (entry.gpu_words.test(static_cast<size_t>(byte / 4))) {
++                std::memcpy(out.data() + (byte - offset), copy + byte, next - byte);
++            }
++            byte = next;
++        }
++    }
++}
++
++template <class P>
++void BufferCache<P>::Nx2MarkListWords(Nx2ListPage& entry, u64 begin, u64 end, bool set) {
++    if (begin >= end) {
++        return;
++    }
++    // Words GPU work may have written in part count whole; the host clears only whole words.
++    const u64 first = set ? begin / 4 : (begin + 3) / 4;
++    const u64 last = (std::min<u64>)(set ? (end + 3) / 4 : end / 4, Nx2ListPageWords);
++    for (u64 word = first; word < last; ++word) {
++        entry.gpu_words.set(static_cast<size_t>(word), set);
++    }
++}
++
++template <class P>
++bool BufferCache<P>::Nx2HasListWords(const Nx2ListPage& entry, u64 begin, u64 end) {
++    const u64 last = (std::min<u64>)((end + 3) / 4, Nx2ListPageWords);
++    for (u64 word = begin / 4; word < last; ++word) {
++        if (entry.gpu_words.test(static_cast<size_t>(word))) {
++            return true;
++        }
++    }
++    return false;
++}
++
+ template <class P>
+ void BufferCache<P>::Nx2NoteListSynced(DAddr page) {
+     if constexpr (!IS_OPENGL) {
+         std::scoped_lock lock{nx2_list_mutex};
+         Nx2ListPage& entry = nx2_list_pages[page];
+         entry.synced_writes = entry.writes;
++        entry.gpu_words.reset();
++        entry.flushed = true;
+     }
+ }
+ 
+@@ -3420,6 +3493,8 @@ void BufferCache<P>::Nx2FlushListPages(std::span<const DAddr> pages) {
+             const auto it = nx2_list_pages.find(page);
+             if (it != nx2_list_pages.end() && it->second.writes == writes) {
+                 it->second.synced_writes = writes;
++                it->second.gpu_words.reset();
++                it->second.flushed = true;
+             }
+         }
+     }
+@@ -3441,7 +3516,8 @@ void BufferCache<P>::Nx2NoteListHostWrite(DAddr device_addr, u64 size) {
+                 continue;
+             }
+             std::scoped_lock lock{nx2_list_mutex};
+-            const auto it = nx2_list_pages.find(page << page_bits);
++            const DAddr page_addr = page << page_bits;
++            const auto it = nx2_list_pages.find(page_addr);
+             if (it == nx2_list_pages.end()) {
+                 continue;
+             }
+@@ -3451,6 +3527,10 @@ void BufferCache<P>::Nx2NoteListHostWrite(DAddr device_addr, u64 size) {
+             if (synced) {
+                 entry.synced_writes = entry.writes;
+             }
++            Nx2MarkListWords(entry, (std::max)(device_addr, page_addr) - page_addr,
++                             (std::min)(device_addr + size, page_addr + (DAddr{1} << page_bits)) -
++                                 page_addr,
++                             false);
+         }
+     }
+ }
+@@ -4150,14 +4230,15 @@ void BufferCache<P>::TraceTablePointer(bool compute, size_t stage, size_t ssbo_i
  
  template <class P>
  Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index, bool is_written,
@@ -1876,7 +2237,7 @@ index dcb049da8b..e4c422731b 100644
      const u64 next_qword = reads_size_word ? gpu_memory->Read<u64>(ssbo_addr + 8) : 0;
      const u32 alignment = runtime.GetStorageBufferAlignment();
      struct CachedBinding {
-@@ -4172,7 +4176,8 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
+@@ -4172,7 +4253,8 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
      constexpr size_t ways = 4;
      thread_local std::array<std::array<CachedBinding, ways>, 512> binding_cache{};
      const u32 flags =
@@ -1886,7 +2247,7 @@ index dcb049da8b..e4c422731b 100644
      const size_t owner = gpu_memory->GetID() + 1;
      const u64 serial = gpu_memory->MapSerial();
      auto& set = binding_cache[((gpu_addr ^ next_qword ^ flags) * 0x9E3779B97F4A7C15ULL) >> 55];
-@@ -4205,7 +4210,7 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
+@@ -4205,7 +4287,7 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
              // A native (Switch 2) compute program's pointer is bare: the word after it is another
              // parameter (a dimension, stride or texture handle), not an NVN buffer size. Taking it
              // as one bound Fortune's Weave's DLSS input features to 266 bytes and dropped the rest.
@@ -1895,7 +2256,7 @@ index dcb049da8b..e4c422731b 100644
                  return (std::min)(memory_layout_size, static_cast<u32>(8_MiB));
              }
              const u32 packed_size = static_cast<u32>(next_qword);
-@@ -4310,4 +4315,4 @@ std::pair<typename BufferCache<P>::Buffer*, u32> BufferCache<P>::GetDrawIndirect
+@@ -4310,4 +4392,4 @@ std::pair<typename BufferCache<P>::Buffer*, u32> BufferCache<P>::GetDrawIndirect
                            buffer.Offset(channel_state->indirect_buffer_binding.device_addr));
  }
  
@@ -1903,10 +2264,59 @@ index dcb049da8b..e4c422731b 100644
 +} // namespace VideoCommon
 \ No newline at end of file
 diff --git a/src/video_core/buffer_cache/buffer_cache_base.h b/src/video_core/buffer_cache/buffer_cache_base.h
-index d5444a963d..6e4d603ed9 100644
+index d5444a963d..c7b9862754 100644
 --- a/src/video_core/buffer_cache/buffer_cache_base.h
 +++ b/src/video_core/buffer_cache/buffer_cache_base.h
-@@ -718,7 +718,8 @@ private:
+@@ -10,6 +10,7 @@
+ #include <cstdlib>
+ #include <array>
+ #include <bit>
++#include <bitset>
+ #include <chrono>
+ #include <functional>
+ #include <memory>
+@@ -45,6 +46,7 @@
+ #include "video_core/engines/kepler_compute.h"
+ #include "video_core/engines/maxwell_3d.h"
+ #include "video_core/memory_manager.h"
++#include "video_core/nx2.h"
+ #include "video_core/nx2_download_trace.h"
+ #include "video_core/nx2_async_readback.h"
+ #include "video_core/nx2_fast_draw.h"
+@@ -434,21 +436,23 @@ public:
+     /// True when it recorded copies, which the GPU completes at `tick` (the caller submits).
+     bool Nx2CopyListPages(u64 tick);
+     enum class Nx2ListRead { Unknown, Copied, Synced, NeedsSync, Pending };
+-    /// Front thread: Synced when guest memory holds the page `device_addr` lies in (flushed and
+-    /// written by no GPU work since), else Copied with `out` filled from the copy of its last
+-    /// write once the GPU is done with it. Unknown otherwise: the caller drains and flushes.
+-    /// Pages draws write are only Synced or Unknown, and NeedsSync until `past_sync`: the
+-    /// split's back ran the work before the last host-level wait (GpuSplit::WaitForSync).
+-    /// With `pending_tick`, a copy the GPU has not finished returns Pending and sets the tick
+-    /// instead of waiting for it.
++    /// Front thread: Synced when guest memory holds the bytes [device_addr, device_addr +
++    /// out.size()) of their page: no GPU work wrote them since the page was flushed, or the host
++    /// wrote them since. Else Copied with `out` filled once the GPU is done with the copy of the
++    /// page's last write: from the copy where GPU work wrote, from guest memory elsewhere once
++    /// the page was flushed. Unknown otherwise: the caller drains and flushes. Pages draws write
++    /// are only Synced or Unknown, and NeedsSync until `past_sync`: the split's back ran the work
++    /// before the last host-level wait (GpuSplit::WaitForSync). With `pending_tick`, a copy the
++    /// GPU has not finished returns Pending and sets the tick instead of waiting for it.
+     Nx2ListRead Nx2ReadListCopy(DAddr device_addr, std::span<u8> out, bool past_sync,
+                                 u64* pending_tick = nullptr);
+     /// Front thread, the split drained: the command list page was flushed to guest memory.
+     void Nx2NoteListSynced(DAddr page);
+ 
+     void Nx2FlushListPages(std::span<const DAddr> pages);
+-    /// CPU and inline writes: they reach guest memory, so a synced page stays synced, but its copy
+-    /// no longer holds the page.
++    /// CPU, inline and copy engine writes of bytes guest memory holds: they reach guest memory,
++    /// so a synced page stays synced and the words they cover are guest memory's again, but the
++    /// page's copy no longer holds the page.
+     void Nx2NoteListHostWrite(DAddr device_addr, u64 size);
+ 
+     /// Return true when a CPU region is modified from the GPU
+@@ -718,7 +722,8 @@ private:
  
      [[nodiscard]] Binding StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index, bool is_written,
                                                 bool native_pointer = false,
@@ -1916,6 +2326,280 @@ index d5444a963d..6e4d603ed9 100644
  
      void TraceTablePointer(bool compute, size_t stage, size_t ssbo_index, u32 cbuf_index,
                             u32 cbuf_offset, u32 indirect_offset, GPUVAddr holder,
+@@ -1100,8 +1105,9 @@ private:
+ 
+     /// A command list page (Nx2CopyListPages): the GPU writes noted to it and the last copy.
+     using Nx2Staging = decltype(std::declval<Runtime&>().DownloadStagingBuffer(size_t{}, true));
++    static constexpr size_t Nx2ListPageWords = (size_t{1} << Tegra::Nx2WrittenPageBits) / 4;
+     struct Nx2ListPage {
+-        u64 writes{};      ///< GPU writes noted to the page
++        u64 writes{};      ///< GPU and host writes noted to the page
+         u64 copy_writes{}; ///< `writes` when the copy was made: the copy is current while equal
+         u64 copy_tick{};   ///< GPU tick that completes the copy
+         /// `writes` when the front last flushed the page: guest memory holds it while equal
+@@ -1114,8 +1120,25 @@ private:
+         /// the page's lists read guest memory once the back ran the work before the last such
+         /// wait and no write came since the front flushed the page (Nx2ReadListCopy).
+         bool draw_written{};
++        /// The page's 4-byte words GPU work wrote that guest memory does not hold: set by the GPU
++        /// writes noted to the page (the whole range a dispatch or copy may write), cleared for
++        /// the words the host writes whole and for every word once the front flushed the page.
++        /// Once it did (`flushed`), guest memory holds the other words, so a list on none of
++        /// these reads it directly. Before, GPU work may have written the page before it became
++        /// a command list page, unnoted.
++        std::bitset<Nx2ListPageWords> gpu_words;
++        bool flushed{};
+         std::optional<Nx2Staging> copy;
+     };
++    /// Sets (`set`) or clears the words of `entry.gpu_words` within [begin, end) bytes of its
++    /// page: every word the bytes touch when setting, only the words they cover when clearing.
++    static void Nx2MarkListWords(Nx2ListPage& entry, u64 begin, u64 end, bool set);
++    /// Whether GPU work wrote any word of [begin, end) bytes of the page guest memory lacks.
++    [[nodiscard]] static bool Nx2HasListWords(const Nx2ListPage& entry, u64 begin, u64 end);
++    /// Fills `out` with the page's bytes from `offset` (`device_addr`) on: the words of
++    /// `entry.gpu_words` from its copy, the others from guest memory.
++    void Nx2ReadListWords(const Nx2ListPage& entry, DAddr device_addr, u64 offset,
++                          std::span<u8> out);
+     std::mutex nx2_list_mutex; ///< nx2_list_pages: the split's front reads the copies
+     std::unordered_map<DAddr, Nx2ListPage> nx2_list_pages;
+     /// Copies replaced while the GPU may still write them: freed once it is past their tick.
+diff --git a/src/video_core/dma_pusher.cpp b/src/video_core/dma_pusher.cpp
+index fbe3e07086..068f6d181e 100644
+--- a/src/video_core/dma_pusher.cpp
++++ b/src/video_core/dma_pusher.cpp
+@@ -37,6 +37,22 @@ namespace Tegra {
+ constexpr u32 MacroRegistersStart = 0xE00;
+ constexpr u32 ComputeInline = 0x6D;
+ 
++namespace {
++
++/// The split's position after the last copy engine method that may write memory (the front's).
++u64 g_last_copy_writer{};
++
++/// Whether copy engine work sent so far may still be queued on the split's back. A new session
++/// starts the split's positions over: a position past the current one is from an older session.
++[[nodiscard]] bool CopyWritersPending(const VideoCommon::GpuSplit& split) {
++    if (g_last_copy_writer > split.Position()) {
++        g_last_copy_writer = 0;
++    }
++    return !split.Ran(g_last_copy_writer);
++}
++
++} // Anonymous namespace
++
+ bool DmaPusher::IsMemoryWriter(const Engines::EngineInterface& engine, Engines::EngineTypes type,
+                               u32 method) {
+     if (type == Engines::EngineTypes::KeplerCompute) {
+@@ -276,7 +292,16 @@ bool DmaPusher::Step() {
+         // queued before it. The GPU fetches the list after that work only past a host-level wait
+         // (NoteSync): later work is not ordered before the fetch, and the list does not wait for
+         // it (nor for draws, which write memory too; draw-written lists wait for the last sync).
+-        if (!gpu_written && VideoCommon::GpuSplit::Get().Active()) {
++        // Lists that begin between methods don't wait for compute work either: they are command
++        // buffers the CPU writes. The words GPU work writes for the front to fetch are the
++        // parameters of a method begun in the entry before (an indirect dispatch's or draw's,
++        // as in Ocarina of Time and title 1), which begin inside its data. An entry resumed after
++        // an acquire resumes after a puller method, which no parameter list holds. The copy
++        // engine can copy GPU-written words anywhere: while its work is queued, every list waits.
++        const bool command_entry = dma_state.method_count == 0;
++        const bool waits_for_writers =
++            !command_entry || CopyWritersPending(VideoCommon::GpuSplit::Get());
++        if (!gpu_written && VideoCommon::GpuSplit::Get().Active() && waits_for_writers) {
+             VideoCommon::GpuSplit::Get().WaitForSyncedWriters();
+             gpu_written =
+                 IsGpuWrittenCommands(dma_state.dma_get, size_t{header.size} * sizeof(u32));
+@@ -580,6 +605,9 @@ void DmaPusher::CallMethod(u32 argument) {
+         SCOPE_EXIT {
+             if (writer) {
+                 split.NoteWriter();
++                if (engine_type == Engines::EngineTypes::MaxwellDMA) {
++                    g_last_copy_writer = split.Position();
++                }
+             }
+         };
+         if (split.Active()) {
+@@ -641,6 +669,9 @@ void DmaPusher::CallMultiMethod(const u32* base_start, u32 num_methods) {
+         SCOPE_EXIT {
+             if (writer) {
+                 split.NoteWriter();
++                if (engine_type == Engines::EngineTypes::MaxwellDMA) {
++                    g_last_copy_writer = split.Position();
++                }
+             }
+         };
+         if (split.Active()) {
+@@ -756,9 +787,9 @@ bool DmaPusher::ReadGpuWrittenCommands(GPUVAddr address, u32 count, bool* pendin
+     // them to host memory right after the dispatch or copy that writes them and submits. The
+     // front then waits only for the back to run that work and for the GPU to finish the copy, not
+     // for everything queued and a cache flush (FlushGpuWrittenCommands: ~400 GPU round trips a
+-    // second in a Mario Kart World race, during which the back had nothing to do). Pages
+-    // FlushGpuWrittenCommands flushed whole and no GPU work wrote since are read from guest
+-    // memory.
++    // second in a Mario Kart World race, during which the back had nothing to do). Lists on words
++    // no GPU work wrote since FlushGpuWrittenCommands flushed the page, or the host wrote them,
++    // are read from guest memory and wait for no copy (BufferCache::Nx2ReadListCopy).
+     if (!Tegra::g_nx2_ampere.load(std::memory_order_relaxed) || count == 0 ||
+         rasterizer == nullptr) {
+         return false;
+@@ -775,13 +806,16 @@ bool DmaPusher::ReadGpuWrittenCommands(GPUVAddr address, u32 count, bool* pendin
+     if (!written) {
+         return false;
+     }
++    // As for lists on pages no GPU work wrote (Step): the dispatch or copy that rewrites the
++    // list is ordered before the fetch only by a host-level wait between them, so the front waits
++    // for the work before the last one, not for compute and copy work sent after it.
+     auto& split = VideoCommon::GpuSplit::Get();
+     // Resuming after the copy's tick: the back ran the list's writer before the suspension
+     // (this wait ran then), and waiting again would wait for the other channels' work queued
+     // meanwhile too.
+     const bool resumed = std::exchange(resumed_list_read, false);
+     if (split.Active() && !resumed) {
+-        split.WaitForWriters();
++        split.WaitForSyncedWriters(VideoCommon::DrainSite::ListCopies);
+     }
+     bool past_sync = !split.Active();
+     using GpuWrittenList = VideoCore::RasterizerInterface::GpuWrittenList;
+diff --git a/src/video_core/engines/maxwell_3d.cpp b/src/video_core/engines/maxwell_3d.cpp
+index e20d9dd266..48f4af69e3 100644
+--- a/src/video_core/engines/maxwell_3d.cpp
++++ b/src/video_core/engines/maxwell_3d.cpp
+@@ -318,16 +318,6 @@ size_t Maxwell3D::EstimateIndexBufferSize() {
+     return std::min<size_t>(memory_manager.GetMemoryLayoutSize(start_address, byte_size * max_size) / byte_size, lower_cap);
+ }
+ 
+-u32 Maxwell3D::ProcessShadowRam(u32 method, u32 argument) {
+-    // Keep track of the register value in shadow_state when requested.
+-    auto const c = shadow_state.shadow_ram_control;
+-    if (c == Regs::ShadowRamControl::Track || c == Regs::ShadowRamControl::TrackWithFilter)
+-        return shadow_state.reg_array[method] = argument;
+-    else if (c == Regs::ShadowRamControl::Replay)
+-        return shadow_state.reg_array[method];
+-    return argument;
+-}
+-
+ void Maxwell3D::ConsumeSinkImpl(Core::System& system) {
+     if (front_macros && !VideoCommon::GpuSplit::OnBackThread()) {
+         ReleaseFront();
+@@ -356,22 +346,6 @@ void Maxwell3D::ConsumeSinkImpl(Core::System& system) {
+     method_sink.clear();
+ }
+ 
+-void Maxwell3D::ProcessDirtyRegisters(u32 method, u32 argument) {
+-    // The instances after the first are drawn together once their loop ends, and they must see
+-    // the state they were begun with: NVN's draw macros reset the base instance (and its copy in
+-    // c[0][0x644]) right after the loop, before the macro returns.
+-    if (draw_manager.HasDeferredDraw() && !DrawManager::IsInstanceLoopMethod(method)) [[unlikely]] {
+-        draw_manager.DrawDeferred(*this, true);
+-    }
+-    if (VideoCommon::Nx2FastDraw::Enabled() && regs.reg_array[method] != argument &&
+-        !IsFastDrawParameter(method)) {
+-        VideoCommon::Nx2FastDraw::Break(VideoCommon::Nx2FastDraw::Reason::Register, method);
+-    }
+-    regs.reg_array[method] = argument;
+-    for (auto const& table : dirty.tables)
+-        dirty.flags[table[method]] = true;
+-}
+-
+ bool Maxwell3D::IsFastDrawParameter(u32 method) {
+     switch (method) {
+     case MAXWELL3D_REG_INDEX(const_buffer.size):
+@@ -540,6 +514,15 @@ void Maxwell3D::CallMethod(Core::System& system, u32 method, u32 method_argument
+     if (front_macros && !VideoCommon::GpuSplit::OnBackThread()) {
+         ReleaseFront();
+     }
++    // About half of the split back's 3D writes (~5 million a second in Ocarina of Time) are state
++    // registers: CallMethodFast's state write, here without the calls to it. A register not in
++    // execution_mask is not SET_SHADOW_RAM_CONTROL either (CallMethodSlow's). The verify switch
++    // takes the longer path below; the profile, the write history and the first-write trace
++    // leave fast_maxwell3d off.
++    if (fast_maxwell3d && executing_macro == 0 && method < MacroRegistersStart &&
++        !execution_mask[method] && !perf_verify) {
++        return WriteStateRegister(method, method_argument);
++    }
+     if (!fast_maxwell3d || executing_macro != 0 || method >= MacroRegistersStart ||
+         method == MAXWELL3D_REG_INDEX(shadow_ram_control)) {
+         return CallMethodSlow(system, method, method_argument, is_last_call);
+@@ -571,13 +554,10 @@ bool IsStoreOnlyExecutable(u32 method) {
+ // no write history, trace or profile, not a macro call or SET_SHADOW_RAM_CONTROL. The hot
+ // executable methods go straight to their handler.
+ void Maxwell3D::CallMethodFast(u32 method, u32 method_argument, bool is_last_call) {
+-    const u32 argument = ProcessShadowRam(method, method_argument);
+     if (!execution_mask[method]) {
+-        if (!SkipSameValueWrites() || regs.reg_array[method] != argument) {
+-            ProcessDirtyRegisters(method, argument);
+-        }
+-        return;
++        return WriteStateRegister(method, method_argument);
+     }
++    const u32 argument = ProcessShadowRam(method, method_argument);
+     ProcessDirtyRegisters(method, argument);
+     constexpr u32 cb_data = MAXWELL3D_REG_INDEX(const_buffer.buffer);
+     if (method - cb_data < 16) {
+diff --git a/src/video_core/engines/maxwell_3d.h b/src/video_core/engines/maxwell_3d.h
+index 5b9ba1b1a1..1b491d5344 100644
+--- a/src/video_core/engines/maxwell_3d.h
++++ b/src/video_core/engines/maxwell_3d.h
+@@ -3293,9 +3293,48 @@ private:
+ 
+     void ProcessMacro(Core::System& system, u32 method, const u32* base_start, u32 amount, bool is_last_call);
+ 
+-    u32 ProcessShadowRam(u32 method, u32 argument);
++    /// The value a write leaves in the register, as the shadow RAM mode has it: the argument
++    /// (tracked in shadow_state when tracking), or the shadow copy when replaying. Defined here,
++    /// as the hot method paths call it for nearly every write.
++    u32 ProcessShadowRam(u32 method, u32 argument) {
++        const auto control = shadow_state.shadow_ram_control;
++        if (control == Regs::ShadowRamControl::Track ||
++            control == Regs::ShadowRamControl::TrackWithFilter) {
++            return shadow_state.reg_array[method] = argument;
++        }
++        if (control == Regs::ShadowRamControl::Replay) {
++            return shadow_state.reg_array[method];
++        }
++        return argument;
++    }
++
++    /// Stores a register's value and sets its dirty flags. Defined here for the same reason.
++    void ProcessDirtyRegisters(u32 method, u32 argument) {
++        // The instances after the first are drawn together once their loop ends, and they must see
++        // the state they were begun with: NVN's draw macros reset the base instance (and its copy
++        // in c[0][0x644]) right after the loop, before the macro returns.
++        if (draw_manager.HasDeferredDraw() && !DrawManager::IsInstanceLoopMethod(method)) {
++            draw_manager.DrawDeferred(*this, true);
++        }
++        // A changed register that doesn't only parameterize the next draw ends fast draw reuse.
++        if (VideoCommon::Nx2FastDraw::Enabled() && regs.reg_array[method] != argument &&
++            !IsFastDrawParameter(method)) {
++            VideoCommon::Nx2FastDraw::Break(VideoCommon::Nx2FastDraw::Reason::Register, method);
++        }
++        regs.reg_array[method] = argument;
++        for (const auto& table : dirty.tables) {
++            dirty.flags[table[method]] = true;
++        }
++    }
+ 
+-    void ProcessDirtyRegisters(u32 method, u32 argument);
++    /// CallMethodFast for a state register (not in execution_mask): a write of the value the
++    /// register holds changes nothing (EDEN_NX2_SKIP_SAME=0 keeps it).
++    void WriteStateRegister(u32 method, u32 method_argument) {
++        const u32 argument = ProcessShadowRam(method, method_argument);
++        if (!SkipSameValueWrites() || regs.reg_array[method] != argument) {
++            ProcessDirtyRegisters(method, argument);
++        }
++    }
+ 
+     void ConsumeSinkImpl(Core::System& system) override;
+ 
+@@ -3395,7 +3434,8 @@ private:
+     // loads nx2_switches.txt.
+     const bool trace_first_method_writes = std::getenv("EDEN_NX2_3D_METHODS") != nullptr;
+     // EDEN_NX2_SKIP_SAME and EDEN_NX2_PERF_VERIFY, read per engine like the switch above. Every
+-    // method checks them, so they are members rather than statics with a guard on the hot path.
++    // method checks them, so they are members rather than function statics (MSVC reads a
++    // thread-local to check a static's initialization on every call).
+     const bool skip_same_value_writes = [] {
+         const char* value = std::getenv("EDEN_NX2_SKIP_SAME");
+         return value == nullptr || value[0] != '0';
 diff --git a/src/video_core/framebuffer_config.h b/src/video_core/framebuffer_config.h
 index bb041cf12f..1befb2ba29 100644
 --- a/src/video_core/framebuffer_config.h
@@ -1967,9 +2651,20 @@ index 55988006d7..e943937209 100644
      void OnCommandListEnd();
  
 diff --git a/src/video_core/gpu_split.cpp b/src/video_core/gpu_split.cpp
-index 2a7e43885d..327670dc06 100644
+index 2a7e43885d..bcc7f92fef 100644
 --- a/src/video_core/gpu_split.cpp
 +++ b/src/video_core/gpu_split.cpp
+@@ -341,8 +341,8 @@ bool GpuSplit::WaitForWrites(const Tegra::MemoryManager& memory, GPUVAddr addres
+                    DrainSite::MacroDmaWrites);
+ }
+ 
+-bool GpuSplit::WaitForSyncedWriters() {
+-    return WaitFor(std::min(synced_writer_position, write_position), DrainSite::ListWriters);
++bool GpuSplit::WaitForSyncedWriters(DrainSite site) {
++    return WaitFor(std::min(synced_writer_position, write_position), site);
+ }
+ 
+ bool GpuSplit::WaitFor(u64 target, DrainSite site) {
 @@ -689,4 +689,4 @@ void GpuSplit::ReportAcquire() {
      }
  }
@@ -1977,6 +2672,50 @@ index 2a7e43885d..327670dc06 100644
 -} // namespace VideoCommon
 +} // namespace VideoCommon
 \ No newline at end of file
+diff --git a/src/video_core/gpu_split.h b/src/video_core/gpu_split.h
+index 5b38aa83b7..5733816dba 100644
+--- a/src/video_core/gpu_split.h
++++ b/src/video_core/gpu_split.h
+@@ -51,6 +51,7 @@ enum class DrainSite : u32 {
+     RingFull,       ///< The ring is full: the front waits for the back to make room
+     BackRegister,   ///< A register a macro the back ran may have written (Maxwell3D)
+     BackCode,       ///< The macro code changes under the macros the back has yet to run
++    ListCopies,     ///< Lists on GPU-written pages: the dispatches and copies before the last sync
+     Count,
+ };
+ 
+@@ -95,7 +96,7 @@ inline constexpr std::array<const char*, static_cast<size_t>(DrainSite::Count)>
+     "other",           "fetch drain",   "acquire",    "semaphore flush", "fence release",
+     "list writers",    "list sync",     "list flush", "macro dma read",  "macro dma writes",
+     "macro dma flush", "gp sync fence", "map",        "front start",     "front verify",
+-    "ring full",       "back register", "back code",
++    "ring full",       "back register", "back code",  "list copy writers",
+ };
+ 
+ // Splits the GPU thread in two (NX2_GPU_THREAD_SPLIT.md). The GPU thread (the front) takes the
+@@ -285,6 +286,11 @@ public:
+     bool WaitUntil(u64 position, DrainSite site) {
+         return WaitFor((std::min)(position, write_position), site);
+     }
++    /// Whether the back executed everything sent before `position`. It may tell so a little
++    /// late: the back stores its position every few thousand words and when it runs out of work.
++    [[nodiscard]] bool Ran(u64 position) const {
++        return consumed.load(std::memory_order_acquire) >= position;
++    }
+ 
+     /// Compute or copy work was just sent: what can write GPU-written command lists.
+     void NoteWriter() {
+@@ -316,8 +322,8 @@ public:
+         u64 device_address) const;
+     /// Waits until the back executed the compute and copy work sent before the last NoteSync:
+     /// the writers a command list fetched now is ordered after. Returns whether any of it was
+-    /// still queued.
+-    bool WaitForSyncedWriters();
++    /// still queued. `site`: whose wait it is, for EDEN_NX2_GPU_PROFILE.
++    bool WaitForSyncedWriters(DrainSite site = DrainSite::ListWriters);
+ 
+     /// The entry just sent (Writes::Noted) writes [address, address + size) of `memory`.
+     void NoteWrite(const Tegra::MemoryManager& memory, GPUVAddr address, u64 size);
 diff --git a/src/video_core/gpu_thread.cpp b/src/video_core/gpu_thread.cpp
 index 00d931cb53..5453806192 100644
 --- a/src/video_core/gpu_thread.cpp
@@ -2103,6 +2842,40 @@ index 0913a55641..6448f311a6 100644
          const u64 mask = (bits == 64 ? ~u64{0} : (u64{1} << bits) - 1) << first_bit;
          auto& word = g_nx2_gpu_written_pages[page / 64];
          if ((word.load(std::memory_order_relaxed) & mask) != mask) {
+diff --git a/src/video_core/nx2_perf.h b/src/video_core/nx2_perf.h
+index 0fe16cfb8e..48e7698b94 100644
+--- a/src/video_core/nx2_perf.h
++++ b/src/video_core/nx2_perf.h
+@@ -7,12 +7,24 @@
+ 
+ namespace VideoCommon::Nx2Perf {
+ 
++[[nodiscard]] inline bool VerifySwitchSet() {
++    const char* value = std::getenv("EDEN_NX2_PERF_VERIFY");
++    return value != nullptr && value[0] == '1';
++}
++
++/// EDEN_NX2_PERF_VERIFY=1. A plain flag: the buffer cache, the memory tracker and the 3D engine
++/// check it on hot paths, and a function's static is checked for its initialization on every
++/// call (MSVC reads a thread-local for it).
++inline bool g_verify = VerifySwitchSet();
++
++/// Called by VideoCore::CreateGPU: static initialization runs before the frontend loads
++/// nx2_switches.txt, so a switch set only there takes effect from that point on.
++inline void ReadSwitch() {
++    g_verify = VerifySwitchSet();
++}
++
+ inline bool Verify() {
+-    static const bool verify = [] {
+-        const char* value = std::getenv("EDEN_NX2_PERF_VERIFY");
+-        return value != nullptr && value[0] == '1';
+-    }();
+-    return verify;
++    return g_verify;
+ }
+ 
+ } // namespace VideoCommon::Nx2Perf
 diff --git a/src/video_core/nx2_stutter_trace.cpp b/src/video_core/nx2_stutter_trace.cpp
 index dc27858b64..c7ead193ea 100644
 --- a/src/video_core/nx2_stutter_trace.cpp
@@ -2508,6 +3281,30 @@ index 659d0fb5ff..e234b9049f 100644
  
      void PrepareFrame(const Device& device, Frame* frame, const Layout::FramebufferLayout& layout);
  
+diff --git a/src/video_core/renderer_vulkan/vk_buffer_cache.cpp b/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
+index a87fbe02df..fbf6b06d58 100644
+--- a/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
++++ b/src/video_core/renderer_vulkan/vk_buffer_cache.cpp
+@@ -489,11 +489,17 @@ void BufferCacheRuntime::WaitSubmittedTick(u64 tick) {
+     if (master.IsFree(tick)) {
+         return;
+     }
++    // The split's front waits for the GPU: the back runs meanwhile what the front sent, also the
++    // entries since the front's last publish, which it does not see yet (fewer than 256 words).
++    auto& split = VideoCommon::GpuSplit::Get();
++    const bool front = !VideoCommon::GpuSplit::OnBackThread() && split.Active();
++    if (front) {
++        split.Publish();
++    }
+     // The copy's submission may be deferred (Scheduler::DeferFlush): the split's front asks the
+     // back for it rather than waiting for the back's next submission. If the back has stopped,
+     // nothing else uses the scheduler and Wait submits it.
+-    if (!scheduler.IsSubmitted(tick) && VideoCommon::GpuSplit::Get().Active() &&
+-        !VideoCommon::GpuSplit::OnBackThread()) {
++    if (!scheduler.IsSubmitted(tick) && front) {
+         VideoCommon::Nx2Profile::Scope scope{VideoCommon::Nx2Profile::Zone::ListSubmitWait};
+         if (!scheduler.WaitSubmitted(tick)) {
+             scheduler.Wait(tick);
 diff --git a/src/video_core/renderer_vulkan/vk_present_manager.cpp b/src/video_core/renderer_vulkan/vk_present_manager.cpp
 index ea2a913ad8..25d4b5a4fd 100644
 --- a/src/video_core/renderer_vulkan/vk_present_manager.cpp
@@ -3125,6 +3922,26 @@ index 397616a8d0..28a066c647 100644
          default:
              return PixelFormat::A8B8G8R8_UNORM;
          }
+diff --git a/src/video_core/video_core.cpp b/src/video_core/video_core.cpp
+index 4dc43c1f91..715f4ca632 100644
+--- a/src/video_core/video_core.cpp
++++ b/src/video_core/video_core.cpp
+@@ -16,6 +16,7 @@
+ #include "video_core/nx2_async_readback.h"
+ #include "video_core/nx2_cmdpage_diag.h"
+ #include "video_core/nx2_download_trace.h"
++#include "video_core/nx2_perf.h"
+ #include "video_core/nx2_profile.h"
+ #include "video_core/nx2_stutter_trace.h"
+ #include "video_core/renderer_base.h"
+@@ -58,6 +59,7 @@ void CreateGPU(std::optional<Tegra::GPU>& gpu, Core::Frontend::EmuWindow& emu_wi
+     Tegra::Nx2CmdPageDiag::ReadSwitch();
+     VideoCommon::Nx2DownloadTrace::ReadSwitch();
+     VideoCore::AsyncReadback::ReadSwitch();
++    VideoCommon::Nx2Perf::ReadSwitch();
+ 
+     const auto nvdec_value = Settings::values.nvdec_emulation.GetValue();
+     const bool use_nvdec = nvdec_value != Settings::NvdecEmulation::Off;
 diff --git a/src/video_core/vulkan_common/vulkan_instance.cpp b/src/video_core/vulkan_common/vulkan_instance.cpp
 index 3ab924e37f..4321f9b83f 100644
 --- a/src/video_core/vulkan_common/vulkan_instance.cpp

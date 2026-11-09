@@ -1,8 +1,8 @@
 # Lichii Superbuild (unofficial)
 
-> ## ✅ v37 recommended
+> ## ✅ v38 recommended
 >
-> v37 is based on zortos `nx2` `7afad5494e` (#1061 FSR jitter, #1079 texture-cache joins, #1062 FSR 4, plus v36's #1056 back macros, #1060 FSR 3.1, #1036 shader cache v2 and #1028 async read-back) and includes #874. v32 was removed for AMD graphics issues; v36/v35/v34/v31/v30/v29/v28/v24 remain fallbacks.
+> v38 is based on zortos `nx2` `7afad5494e` plus jpkto's open PRs #1094 and #1095 (command-list waits and state-register writes), with #1061 FSR jitter, #1079 texture-cache joins, #1062 FSR 4, #1056 back macros, #1060 FSR 3.1, #1036 shader cache v2, #1028 async read-back and #874. v32 was removed for AMD graphics issues; v37/v36/v35/v34/v31/v30/v29/v28/v24 remain fallbacks.
 
 ## Credits
 
