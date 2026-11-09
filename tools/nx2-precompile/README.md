@@ -91,10 +91,12 @@ Ocarina of Time file of 133,016 pipelines (1.17 GB) is a recipe of 1.3 MB.
 
 A recipe carries no program code or program header. Making one withholds, with its pipelines, any
 environment whose program header is not its code's, whose mesh geometry header is neither derivable
-from the code nor zero, or whose layout is unknown; and it refuses to write a recipe in which any 32
-bytes of any of the game's programs appear (`Report::environments_withheld`, `FindGameCode`).
-`audit` runs that last check on a recipe from elsewhere against every program of every package and
-version in the game's files; run it before sharing one. What a recipe does keep from the game are
+from the code nor zero, or whose layout is unknown; and it refuses to write a recipe in which it
+finds 32 bytes of any of the game's programs (`Report::environments_withheld`, `FindGameCode`). That
+search is a sampling check, not a proof: it looks for 32-byte windows with at least 16 nonzero
+bytes, starting at every fourth offset of each program. `audit` runs that check on a recipe from
+elsewhere against every program of every package and version in the game's files; run it before
+sharing one. What a recipe does keep from the game are
 the values the translation read: constant buffer values, texture types and formats, storage buffer
 locations. A recipe is made for one game version and one cache version, and is built again when
 either changes. Making the same recipe twice gives the same file.
@@ -138,7 +140,9 @@ One person does this per game version and cache version; everyone else only need
    `Ocarina of Time v131072.nx2recipe`). A new game update or a Lichii build with another cache
    version needs the steps again. For a new cache version, the caches recorded under older ones
    can still be learned from (the Ocarina of Time file for v54 was built from v52 and v53 caches);
-   only the precompiled file must be built by a tool of the new version.
+   only the precompiled file must be built by a tool of the new version. The scripts read every
+   cache in v53's layout, whose task and mesh environments have fields an older layout lacks: a
+   cache whose task or mesh records lack them must be converted first.
 
 `run_pipeline.sh CACHE.bin...` runs the whole chain from the game (`NX2_GAME`, its `.nup`) and the
 disk caches recorded while playing it; see the script's header for the other variables. It needs
@@ -147,7 +151,7 @@ PREFIX.programs (the programs, for the other commands' `--pkg`), PREFIX.tsv (fin
 origin of each), PREFIX.variations.tsv (the programs each variation draws together) and
 PREFIX.errors.txt. `--pkg` also takes a folder of nxnative's `BTCD` packages.
 
-`analyze_session.sh` sorts the pipelines a play session still built at runtime by cause: prepared, state not predicted, mesh, shader not in the game files.
+`analyze_session.sh` sorts the pipelines a play session still built at runtime by cause: prepared, state not predicted, mesh, shader not in the game files. A shader cache v2 log is converted with `cache-export` first; its first new record counts the records of that export.
 
 `py/learn_priors.py` learns the storage-pointer classifications the oracle uses from the recorded
 caches.

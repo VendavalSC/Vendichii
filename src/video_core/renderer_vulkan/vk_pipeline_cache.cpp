@@ -1920,12 +1920,18 @@ void PipelineCache::PreparePrecompiled(const std::filesystem::path& base_dir,
         return;
     }
     const auto modified = std::filesystem::last_write_time(path, error).time_since_epoch().count();
-    // The driver keeps what it compiled; the step runs again for another file, driver or build.
+    // The driver keeps what it compiled; the step runs again for another file, driver, build or
+    // shader settings: the resolution scale is folded into the shaders (RescalingPass), and the
+    // bloom fix, loop safety checks and debug renderer change their translation or SPIR-V.
     const auto stamp_path =
         base_dir / fmt::format("precompiled_prepared.fork-v{}.txt", CACHE_VERSION);
-    const std::string stamp = fmt::format("{} {} {:#x} {} {}\n", file_size, modified,
-                                          device.GetDriverVersion(), Common::g_scm_rev,
-                                          device.GetModelName());
+    const auto& resolution = Settings::values.resolution_info;
+    const std::string stamp = fmt::format(
+        "{} {} {:#x} {} {} scale {} {}/{} bloom {} loops {} debug {}\n", file_size, modified,
+        device.GetDriverVersion(), Common::g_scm_rev, device.GetModelName(), resolution.active,
+        resolution.up_scale, resolution.down_shift, Settings::values.fix_bloom_effects.GetValue(),
+        Settings::values.disable_shader_loop_safety_checks.GetValue(),
+        Settings::values.renderer_debug.GetValue());
     const char* force = std::getenv("EDEN_NX2_PRECOMPILED_FORCE");
     if (!(force && force[0] == '1')) {
         std::ifstream stamp_file(stamp_path, std::ios::binary);
@@ -2203,12 +2209,17 @@ void PipelineCache::PreparePrecompiled(const std::filesystem::path& base_dir,
         std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
     LOG_INFO(Render_Vulkan, "Precompiled pipelines: {} prepared, {} failed, {} skipped, in {:.1f} s",
              state.built, state.failed, state.skipped, seconds);
-    if (!stop_loading.stop_requested()) {
-        std::ofstream stamp_file(stamp_path, std::ios::binary | std::ios::trunc);
-        stamp_file << stamp;
-        stamp_file.close();
-        std::filesystem::remove(progress_path, error);
+    if (stop_loading.stop_requested()) {
+        // Closing the game is not a crash: the next boot continues from here without counting a
+        // restart at this spot.
+        std::scoped_lock lock{state.mutex};
+        write_progress(state.low_water, 0);
+        return;
     }
+    std::ofstream stamp_file(stamp_path, std::ios::binary | std::ios::trunc);
+    stamp_file << stamp;
+    stamp_file.close();
+    std::filesystem::remove(progress_path, error);
 }
 
 void PipelineCache::QueueVulkanPipelineCacheFlush() {
@@ -2399,7 +2410,16 @@ GraphicsPipeline* PipelineCache::CurrentGraphicsPipelineSlowPath() {
         }
         if (!pipeline) {
             const auto keep = evicted_pointer_slots.Take(graphics_key.Hash());
+            const u32 unmasked_before = unmasked_generation.load(std::memory_order_acquire);
             pipeline = CreateGraphicsPipeline(keep ? &*keep : nullptr);
+            // Dropped because its vertex program loads attributes its header does not list: the
+            // program's keys keep every attribute type from now on. When that is this same key
+            // (the attributes it dropped had type 0), the next draw must build it again instead
+            // of finding this empty entry.
+            if (!pipeline && unmasked_generation.load(std::memory_order_acquire) != unmasked_before) {
+                graphics_cache.erase(pair);
+                return nullptr;
+            }
         }
     } else if (StutterTrace::Enabled() && pipeline && !pipeline->WasUsed()) {
         StutterTrace::CountLookup(StutterTrace::Lookup::GraphicsPrebuilt);
@@ -2727,6 +2747,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline(
                     std::scoped_lock lock{unmasked_mutex};
                     unmasked_vertex_programs.insert(key.unique_hashes[1]);
                     any_unmasked_vertex_program.store(true, std::memory_order_release);
+                    unmasked_generation.fetch_add(1, std::memory_order_acq_rel);
                 }
                 LOG_ERROR(Render_Vulkan,
                           "Vertex program {:016x} loads attributes {:#010x} its header does not "

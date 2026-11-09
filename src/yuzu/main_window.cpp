@@ -3018,7 +3018,9 @@ void MainWindow::OnGameListPrepareShadersFromRecipe(u64 program_id, const std::s
     }
     std::vector<u8> recipe;
     {
-        Common::FS::IOFile file{recipe_path.toStdString(), Common::FS::FileAccessMode::Read,
+        // As UTF-16: a narrow path is read in the ANSI code page on Windows.
+        Common::FS::IOFile file{std::filesystem::path{recipe_path.toStdU16String()},
+                                Common::FS::FileAccessMode::Read,
                                 Common::FS::FileType::BinaryFile};
         recipe.resize(file.IsOpen() ? file.GetSize() : 0);
         if (recipe.empty() || file.ReadSpan(std::span<u8>{recipe}) != recipe.size()) {

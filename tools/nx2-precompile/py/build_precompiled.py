@@ -137,7 +137,10 @@ def canonical_key(rec):
     mesh = any(e.stage in (7, 8) for e in rec.envs)
     mask = 0 if mesh else (sf.attribute_read_mask(vertex.sph) if vertex else 0xFFFFFFFF)
     state = sf.canonical(key[48:48 + sf.STATE_LEN], mask)
-    return key[:48] + state + bytes(STATE_TAIL)
+    # Bytes past the prefix are kept where the key's hash covers them (static vertex input, or
+    # transform feedback); otherwise they are cleared, as they are not the pipeline's.
+    tail = key[48 + sf.STATE_LEN:] if sf.hashes_past_prefix(state) else bytes(STATE_TAIL)
+    return key[:48] + state + tail
 
 
 w = Writer()

@@ -907,6 +907,10 @@ std::unique_ptr<OracleEnvironment> MakeOracle(const PackageProgram& program, con
 
 template <typename F>
 void ParallelFor(size_t count, unsigned threads, F&& body) {
+    if (threads == 0) {
+        // As Extract and MakeRecipe read it: every hardware thread.
+        threads = std::max(1u, std::thread::hardware_concurrency());
+    }
     std::atomic<size_t> next{0};
     std::vector<std::thread> workers;
     for (unsigned t = 0; t < threads; ++t) {

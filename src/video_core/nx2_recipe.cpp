@@ -95,6 +95,15 @@ struct Reader {
         at += n;
         return part;
     }
+    /// A count read from the input, refused before anything that size is allocated when the
+    /// rest of the input cannot hold that many entries of at least `min_size` bytes.
+    u32 Count(size_t min_size) {
+        const u32 count = Get<u32>();
+        if (count > (bytes.size() - std::min(at, bytes.size())) / min_size) {
+            throw std::runtime_error("damaged precompile recipe");
+        }
+        return count;
+    }
 };
 
 template <typename F>
@@ -583,8 +592,13 @@ std::vector<u8> MakeRecipe(std::span<const u8> precompiled, const X::Result& ext
                 record.xors[slot] = hash ^ envs[record.envs[next]].hash;
                 ++next;
             }
-            const std::vector<u8> state(key.begin() + KeyHashesSize, key.end());
-            record.state = states.try_emplace(state, static_cast<u32>(states.size())).first->second;
+            // One environment per stage the key names, as the disk cache's records.
+            ok &= next == record.envs.size();
+            if (ok) {
+                const std::vector<u8> state(key.begin() + KeyHashesSize, key.end());
+                record.state =
+                    states.try_emplace(state, static_cast<u32>(states.size())).first->second;
+            }
         }
         if (!ok) {
             ++report.records_dropped;
@@ -685,13 +699,18 @@ std::vector<u8> Assemble(std::span<const u8> recipe, const X::Result& extracted,
     }
     r.Get<u64>();
     r.Get<u32>();
-    r.Get<u32>();
+    // Its facts and render states are this cache version's layout.
+    if (const u32 version = r.Get<u32>(); version != cache_version) {
+        throw std::runtime_error(fmt::format(
+            "precompile recipe for cache version {}; this build uses {}", version, cache_version));
+    }
 
     std::unordered_map<u64, const X::Program*> by_fingerprint;
     for (const auto& p : extracted.programs) {
         by_fingerprint.try_emplace(p.fingerprint, &p);
     }
-    const u32 program_count = r.Get<u32>();
+    // An entry is at least 12 bytes (a program, a fact set) or a render state.
+    const u32 program_count = r.Count(12);
     std::vector<Program> programs(program_count);
     std::vector<Stage> stages(program_count);
     for (u32 i = 0; i < program_count; ++i) {
@@ -718,7 +737,7 @@ std::vector<u8> Assemble(std::span<const u8> recipe, const X::Result& extracted,
     }
 
     // Environments: the facts with the program's code and header put back.
-    const u32 fact_count = r.Get<u32>();
+    const u32 fact_count = r.Count(12);
     struct Env {
         s64 program = -1;
         std::vector<u8> bytes;
@@ -763,7 +782,7 @@ std::vector<u8> Assemble(std::span<const u8> recipe, const X::Result& extracted,
         envs[i].bytes = std::move(env.bytes);
     }
 
-    const u32 state_count = r.Get<u32>();
+    const u32 state_count = r.Count(StateSize);
     std::vector<Bytes> states(state_count);
     for (auto& state : states) {
         state = r.Take(StateSize);

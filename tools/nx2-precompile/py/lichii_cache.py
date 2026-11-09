@@ -546,6 +546,10 @@ def merge_caches(base: bytes, extra: bytes, version: int = 53, extra_mesh_fields
     (Lichii keeps the first record per graphics key hash); extra records whose key hash is new and that pass
     check_loadable are appended re-serialized in the v53 layout. Never writes files."""
     bver, bit = parse_cache(base)
+    # Base records are copied as they are: their layout must be the one the header will name
+    # (task and mesh environments gained fields in v53).
+    if (bver >= 53) != (version >= 53):
+        raise ValueError(f"base cache is v{bver}, whose records are not in the v{version} layout")
     seen_g, seen_c = set(), set()
     for r in bit:
         (seen_c if r.is_compute else seen_g).add(compute_key_hash(r.key) if r.is_compute else graphics_key_hash(r.key))

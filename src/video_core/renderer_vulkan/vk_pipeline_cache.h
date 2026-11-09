@@ -282,6 +282,7 @@ private:
     mutable std::mutex unmasked_mutex;
     std::unordered_set<u64> unmasked_vertex_programs;
     std::atomic<bool> any_unmasked_vertex_program{};
+    std::atomic<u32> unmasked_generation{}; ///< Programs added to unmasked_vertex_programs
 
     const Device& device;
     Scheduler& scheduler;
