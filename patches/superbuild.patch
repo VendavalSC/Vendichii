@@ -2147,6 +2147,25 @@ index 0913a55641..6448f311a6 100644
          const u64 mask = (bits == 64 ? ~u64{0} : (u64{1} << bits) - 1) << first_bit;
          auto& word = g_nx2_gpu_written_pages[page / 64];
          if ((word.load(std::memory_order_relaxed) & mask) != mask) {
+diff --git a/src/video_core/nx2_stutter_trace.cpp b/src/video_core/nx2_stutter_trace.cpp
+index dc27858b64..c7ead193ea 100644
+--- a/src/video_core/nx2_stutter_trace.cpp
++++ b/src/video_core/nx2_stutter_trace.cpp
+@@ -402,11 +402,11 @@ void OnPresent() {
+         // Ticks and count are separate atomics: a run can land in one frame's ticks and the next
+         // frame's count, so each adds up on its own.
+         const u64 count = site_counts[index] - (std::min)(site_counts[index], last_site_counts[index]);
+-        const u64 ticks = site_ticks[index] - (std::min)(site_ticks[index], last_site_ticks[index]);
+-        if (count == 0 && ticks == 0) {
++        const u64 delta = site_ticks[index] - (std::min)(site_ticks[index], last_site_ticks[index]);
++        if (count == 0 && delta == 0) {
+             continue;
+         }
+-        const double ms = static_cast<double>(ticks) * ms_per_tick;
++        const double ms = static_cast<double>(delta) * ms_per_tick;
+         state.window_site_counts[index] += count;
+         state.window_site_ms[index] += ms;
+         sites += fmt::format("{}{}:{}x{:.1f}", sites.empty() ? "" : ",", site_names[index], count, ms);
 diff --git a/src/video_core/query_cache/query_cache.h b/src/video_core/query_cache/query_cache.h
 index 7a971b3666..0706f5c40e 100644
 --- a/src/video_core/query_cache/query_cache.h
