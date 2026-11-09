@@ -349,6 +349,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
         }
     }
     expected_memory = (std::min)(expected_memory, critical_memory);
+    // EDEN_NX2_TC_MINIMUM_MIB: below this the collector does not run at all. The default (half the
+    // device memory past a margin, ~3.3 GiB on a 24 GB card) has it delete every image unused for
+    // a few seconds, so revisited textures are created, uploaded and unswizzled again (hitches).
+    if (const char* value = std::getenv("EDEN_NX2_TC_MINIMUM_MIB")) {
+        minimum_memory = (std::min)(static_cast<u64>(std::strtoull(value, nullptr, 10)) << 20, expected_memory);
+    }
     if (log) {
         LogThresholds();
     }
@@ -1693,6 +1699,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
             return PixelFormat::R5G6B5_UNORM;
         case Service::android::PixelFormat::Bgra8888:
             return PixelFormat::B8G8R8A8_UNORM;
+        case Service::android::PixelFormat::Rgba1010102:
+            return PixelFormat::A2B10G10R10_UNORM;
+        case Service::android::PixelFormat::RgbaFp16:
+            return PixelFormat::R16G16B16A16_FLOAT;
         default:
             return PixelFormat::A8B8G8R8_UNORM;
         }

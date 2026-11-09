@@ -109,3 +109,29 @@ TEST_CASE("Declining the MKW preset preserves global and per-game preferences", 
         CHECK(settings->resolution_setup.UsingGlobal() == !per_game);
     }
 }
+
+TEST_CASE("OoT performance preset applies only when accepted", "[game_presets]") {
+    auto settings = std::make_unique<Settings::Values>();
+    settings->scaling_filter.SetValue(Settings::ScalingFilter::NearestNeighbor);
+    settings->gpu_accuracy.SetValue(Settings::GpuAccuracy::High);
+    settings->nvdec_emulation.SetValue(Settings::NvdecEmulation::Cpu);
+    settings->async_presentation.SetValue(false);
+    settings->use_asynchronous_shaders.SetValue(false);
+    settings->sync_memory_operations.SetValue(true);
+    settings->nvidia_dlss.SetValue(false);
+
+    CHECK_FALSE(
+        Settings::ApplyOcarinaOfTimePreset(*settings, Settings::OcarinaOfTimeProgramId, false));
+    CHECK_FALSE(Settings::ApplyOcarinaOfTimePreset(*settings, Settings::MarioKartWorldProgramId,
+                                                   true));
+    REQUIRE(
+        Settings::ApplyOcarinaOfTimePreset(*settings, Settings::OcarinaOfTimeProgramId, true));
+
+    CHECK(settings->scaling_filter.GetValue() == Settings::ScalingFilter::Fsr3);
+    CHECK(settings->gpu_accuracy.GetValue() == Settings::GpuAccuracy::Low);
+    CHECK(settings->nvdec_emulation.GetValue() == Settings::NvdecEmulation::Gpu);
+    CHECK(settings->async_presentation.GetValue());
+    CHECK(settings->use_asynchronous_shaders.GetValue());
+    CHECK_FALSE(settings->sync_memory_operations.GetValue());
+    CHECK(settings->nvidia_dlss.GetValue());
+}

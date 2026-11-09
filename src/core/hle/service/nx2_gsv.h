@@ -81,6 +81,21 @@
 
 namespace Service {
 
+/// When a video frame was last decoded (steady clock, ns). EDEN_NX2_SWAP_INTERVAL does not apply
+/// while one plays: movies run on the game's own frame count, so a forced interval slows them down.
+inline std::atomic<long long> nx2_last_video_frame_ns{0};
+
+inline long long Nx2SteadyNowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+inline bool Nx2VideoPlaying() {
+    const long long last = nx2_last_video_frame_ns.load(std::memory_order_relaxed);
+    return last != 0 && Nx2SteadyNowNs() - last < 1'000'000'000LL;
+}
+
 // Creates a session served by `iface` and returns its client end. Unlike PushIpcInterface this
 // works from a domain too, for callers that want a raw session handle.
 template <class T>
@@ -1526,6 +1541,8 @@ struct Nx2NativeObjects {
         std::shared_ptr<std::mutex> decoder_mutex;
         u32 gpu_maps{};     // outstanding 426 maps
         bool mapped_here{}; // 426 added its GPU mapping (no other mapping covered it)
+        Tegra::ColorSpace color_space{Tegra::ColorSpace::RGB709};
+        u16 linear_unit_luminance{};
     };
     std::mutex mutex;
     std::map<u32, Memory> memories;
@@ -1939,6 +1956,7 @@ private:
     // Eden's GPU thread has processed the frame. Otherwise the game laps the GPU thread and
     // rewrites command memory it hasn't read yet.
     u32 m_wait_timeouts{};
+    bool m_video_lifts_swap{};
     struct PresentStats {
         long long frame_us{}, fence_us{}, composite_us{}, pace_us{}, max_fence_us{};
         long long max_frame_us{}, hitches{};
@@ -2000,8 +2018,12 @@ private:
         if (mkw_dynamic) {
             swap_interval = 1;
         }
-        if (forced_interval != 0) {
+        const bool video_playing = forced_interval != 0 && Nx2VideoPlaying();
+        if (forced_interval != 0 && !video_playing) {
             swap_interval = forced_interval;
+        }
+        if (forced_interval != 0 && video_playing != std::exchange(m_video_lifts_swap, video_playing)) {
+            LOG_INFO(Service, "nx2:vi2 forced swap interval {}", video_playing ? "lifted for video" : "restored");
         }
         const u32 refresh_rate = (timing & 0xffff) >= 30 && (timing & 0xffff) <= 240 ? timing & 0xffff : 60;
         if (trace) {
@@ -2126,7 +2148,7 @@ private:
 
     // Shows a presented native image: word 5 is the image id, ~word 22 / word 24 the GPU fence
     // (syncpoint, value) to wait for (layout from changes.patch). The image is a block-linear
-    // RGBA8 surface in the console's native GOB layout at GPU address == CPU address.
+    // surface in the console's native GOB layout at GPU address == CPU address.
     // shown_size: the present's word 7, ((height - 1) << 16) | (width - 1) of the area the game drew
     // into from the image's top-left corner (0 when it gives none).
     void Composite(u32 image_id, u32 fence_id, u32 fence_value, u32 shown_size) {
@@ -2135,7 +2157,9 @@ private:
         u64 parent_offset{};
         std::optional<Nx2NativeObjects::VideoTrace> video_trace;
         Nx2ImageLayout layout{};
-        u32 image_format{};
+        Nx2NativeImageFormat image_format{};
+        Tegra::ColorSpace color_space{Tegra::ColorSpace::RGB709};
+        u16 linear_unit_luminance{};
         {
             std::scoped_lock lk{m_objects->mutex};
             const auto image = m_objects->images.find(image_id);
@@ -2150,7 +2174,9 @@ private:
             parent = memory->second.parent;
             parent_offset = memory->second.parent_offset + image->second.offset;
             layout = Nx2CalculateImageLayout(image->second.preference.data());
-            image_format = image->second.preference[6];
+            image_format = static_cast<Nx2NativeImageFormat>(image->second.preference[6]);
+            color_space = image->second.color_space;
+            linear_unit_luminance = image->second.linear_unit_luminance;
             if (Nx2VideoTraceEnabled()) {
                 video_trace = m_objects->last_video_write;
             }
@@ -2234,14 +2260,19 @@ private:
             .offset = 0,
             .width = layout.width,
             .height = layout.height,
-            .stride = static_cast<u32>(layout.pitch / 4),
-            // Preference word 6: 1 = RGBA8, 4 = RGB10A2.
-            .pixel_format = image_format == 4 ? android::PixelFormat::Rgba1010102
-                                              : android::PixelFormat::Rgba8888,
+            .stride = static_cast<u32>(
+                layout.pitch / (image_format == Nx2NativeImageFormat::Rgba16Float ? 8 : 4)),
+            .pixel_format = image_format == Nx2NativeImageFormat::Rgba16Float
+                                ? android::PixelFormat::RgbaFp16
+                            : image_format == Nx2NativeImageFormat::Rgb10A2
+                                ? android::PixelFormat::Rgba1010102
+                                : android::PixelFormat::Rgba8888,
             .transform_flags = android::BufferTransformFlags::Unset,
             .crop_rect = {0, 0, static_cast<int>(crop_width), static_cast<int>(crop_height)},
             .blending = Tegra::BlendMode::Opaque,
             .native_tiling = true,
+            .color_space = color_space,
+            .linear_unit_luminance = linear_unit_luminance,
         }};
         std::vector<Nvidia::NvFence> fences;
         if (fence_id < 192) {
@@ -2348,22 +2379,29 @@ private:
         TipcReplyWords(ctx, {60, 0});
     }
 
-    // nn::vi2::QueryDisplayHdrPaperWhite(display name): u16 paper white in nits. The empty reply
-    // left it to the message buffer's leftovers; answer the BT.2408 reference white.
+    // nn::vi2::QueryDisplayHdrPaperWhite(display name): u16 reference white in nits.
+    // Explicit values are capped at peak; zero selects the Switch 2 calibration default.
     void QueryDisplayHdrPaperWhite(HLERequestContext& ctx) {
-        TipcReplyWords(ctx, {203});
+        if (Settings::values.hdr_reference_white.GetValue() > 0) {
+            TipcReplyWords(ctx, {std::min(Settings::values.hdr_reference_white.GetValue(),
+                                        Settings::values.hdr_peak_luminance.GetValue())});
+        } else {
+            // Switch 2 calibration starts at ceil(peak / 1.5), clamped to 50..300 nits.
+            TipcReplyWords(ctx, {std::clamp<u32>(
+                                    (Settings::values.hdr_peak_luminance.GetValue() * 2U + 2U) / 3U,
+                                    50U, 300U)});
+        }
     }
 
-    // nn::vi2::QueryDisplayHdrStatus(display name): u64 HdrOutputFormat, u16. The sdk's
-    // DefaultDisplay::QueryHdrStatus takes format 1 as HDR output and fails with 0x272 on
-    // anything above 1. With the empty auto stub reply it read the request's leftover words as
-    // the format; Kirby Air Riders re-queries whenever its HDR status event fires and rebuilt its
-    // window images every few frames, which showed black. Report SDR output.
-    // nn::vi2::QueryDisplayHdrStatus(display name): u64 output format, u16 peak luminance in
-    // nits. The sdk takes format 1 as SDR and 2 as HDR and fails the query on any other value.
-    // Report SDR output with a typical SDR panel's peak.
+    // Wire reply: u64 output format (1 = SDR, 2 = HDR), u16 peak luminance in nits.
+    // MKW's SDK converts these to public formats 0/1 before DefaultDisplay tests for HDR.
+    // HDR is explicitly opt-in; luminance defaults are not host-display calibration.
+    // Reports the Vulkan HDR setting, not host support for individual HDR encodings.
     void QueryDisplayHdrStatus(HLERequestContext& ctx) {
-        TipcReplyWords(ctx, {1, 0, 400});
+        const bool hdr_enabled = Settings::values.hdr.GetValue() &&
+                                 Settings::values.renderer_backend.GetValue() ==
+                                     Settings::RendererBackend::Vulkan;
+        TipcReplyWords(ctx, {hdr_enabled ? 2U : 1U, 0, Settings::values.hdr_peak_luminance.GetValue()});
     }
 
     // 212(u64 layer): u64 bits of the layer's buffer slots that are ready. The client polls it once
@@ -3187,6 +3225,7 @@ private:
             pictures.clear();
             const auto decode_start = std::chrono::steady_clock::now();
             decoder->Decode(input.data, input.pts, pictures);
+            nx2_last_video_frame_ns.store(Nx2SteadyNowNs(), std::memory_order_relaxed);
             if (input.end) {
                 decoder->Drain(pictures);
             }
@@ -3940,6 +3979,22 @@ private:
         image.memory = w[19];
         std::copy_n(w + 2, image.preference.size(), image.preference.begin());
         image.size = Nx2CalculateImageLayout(w + 2).size;
+        // gsv 429's native format encodes color as well as storage; other commands use
+        // different descriptor layouts even though they share this handler.
+        if (ctx.GetCommand() == 429 && image.preference[1] == 1) {
+            switch (static_cast<Nx2NativeImageFormat>(image.preference[6])) {
+            case Nx2NativeImageFormat::Rgb10A2:
+                image.color_space = Tegra::ColorSpace::RGB2020_PQ;
+                break;
+            case Nx2NativeImageFormat::Rgba16Float:
+                image.color_space = Tegra::ColorSpace::RGB709_Linear;
+                image.linear_unit_luminance =
+                    static_cast<u16>((image.preference[7] >> 8) & 0xFFFF);
+                break;
+            default:
+                break;
+            }
+        }
         LOG_INFO(Service, "nx2:gsv 429 CreateNativeImage memory={} count={} size={:#x} -> id {}",
                  w[19], w[18], image.size, id);
         TipcReplyWords(ctx, {id});

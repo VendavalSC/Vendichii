@@ -360,7 +360,7 @@ if (CXX_GCC OR CXX_CLANG)
         # See https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html
         # Generic supports Pentium Pro instruction set and above
         # TODO: if a value is unknown, pass that as march and mtune
-        set(YUZU_BUILD_PRESET "custom" CACHE STRING "Build preset to use. One of: custom, generic, v3, zen2, zen4, native")
+        set(YUZU_BUILD_PRESET "custom" CACHE STRING "Build preset to use. One of: custom, generic, v3, zen2, zen3, zen4, native")
 
         if (${YUZU_BUILD_PRESET} STREQUAL "generic")
             set(march x86-64)
@@ -371,6 +371,9 @@ if (CXX_GCC OR CXX_CLANG)
         elseif (${YUZU_BUILD_PRESET} STREQUAL "zen2")
             set(march znver2)
             set(mtune znver2)
+        elseif (${YUZU_BUILD_PRESET} STREQUAL "zen3")
+            set(march znver3)
+            set(mtune znver3)
         elseif (${YUZU_BUILD_PRESET} STREQUAL "zen4")
             set(march znver4)
             set(mtune znver4)
@@ -394,8 +397,14 @@ if (CXX_GCC OR CXX_CLANG)
     endif()
 
     if (DEFINED march AND DEFINED mtune)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=${march} -mtune=${mtune}")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=${march} -mtune=${mtune}")
+        # clang-cl ignores GCC-style -march/-mtune unless passed through /clang:
+        if (MSVC)
+            set(arch_flags "/clang:-march=${march} /clang:-mtune=${mtune}")
+        else()
+            set(arch_flags "-march=${march} -mtune=${mtune}")
+        endif()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${arch_flags}")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${arch_flags}")
     endif()
 endif()
 

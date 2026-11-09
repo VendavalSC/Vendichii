@@ -1440,6 +1440,11 @@ bool BufferCache<P>::DMACopy(GPUVAddr src_address, GPUVAddr dest_address, u64 am
         .size = amount,
     }};
 
+    // Guest memory gets the copy below, which holds every byte the source has in guest memory:
+    // command list pages in the destination read those from it, and their copies are stale. The
+    // bytes copied from GPU-written source ranges are noted as GPU writes after this.
+    Nx2NoteListHostWrite(*cpu_dest_address, amount);
+
     boost::container::small_vector<std::pair<DAddr, size_t>, 4> tmp_intervals;
     auto mirror = [&](DAddr base_address, DAddr base_address_end) {
         const u64 size = base_address_end - base_address;
@@ -1485,14 +1490,17 @@ bool BufferCache<P>::DMAClear(GPUVAddr dst_address, u64 amount, u32 value) {
     if (!cpu_dst_address) {
         return false;
     }
-    const bool dest_dirty = IsRegionRegistered(*cpu_dst_address, amount);
+    // `amount` counts words.
+    const size_t size = amount * sizeof(u32);
+    const bool dest_dirty = IsRegionRegistered(*cpu_dst_address, size);
     if (!dest_dirty) {
         return false;
     }
 
-    const size_t size = amount * sizeof(u32);
     ClearDownload(*cpu_dst_address, size);
     gpu_modified_ranges.Subtract(*cpu_dst_address, size);
+    // As an inline write: command list pages read the cleared words from guest memory.
+    Nx2NoteListHostWrite(*cpu_dst_address, size);
 
     const BufferId buffer = FindBuffer(*cpu_dst_address, static_cast<u32>(size), false);
     Buffer& dest_buffer = slot_buffers[buffer];
@@ -1793,7 +1801,9 @@ bool BufferCache<P>::BindGraphicsStorageBuffer(size_t stage, size_t ssbo_index, 
         StorageBufferBinding(ssbo_addr, cbuf_index, is_written,
                              maxwell3d->GetNativeMacroEngine().native_turing ||
                                  indirect_offset != ~0U,
-                             indirect_offset != ~0U);
+                             indirect_offset != ~0U,
+                             maxwell3d->GetNativeMacroEngine().native_turing ||
+                                 indirect_offset != ~0U);
     if (indirect_offset != ~0U) {
         TraceTablePointer(false, stage, ssbo_index, cbuf_index, cbuf_offset, indirect_offset, holder,
                           channel_state->storage_buffers[stage][ssbo_index]);
@@ -2522,6 +2532,7 @@ void BufferCache<P>::BindHostGraphicsUniformBuffer(size_t stage, u32 index, u32 
     // Native programs keep tables next to their code in a 64 KiB bank read with indirect offsets
     // (Splatoon Raiders: the dialogue box corners in c1). Writes to that memory can go unnoticed by
     // the memory tracker, leaving stale host contents, so upload such a bank again once per frame.
+    // Copied directly: marking it CPU-modified unprotected and reprotected its pages each frame.
     if (has_host_buffer && (*channel_state->uniform_buffer_sizes)[stage][index] == 0x10000 &&
         size != 0 && gpu_memory != nullptr && gpu_memory->UsesNativeTiling() &&
         (Nx2Perf::Verify() || !native_indirect_uniforms_this_frame.contains(device_addr)) &&
@@ -3242,6 +3253,11 @@ void BufferCache<P>::Nx2NoteListWrite(BufferId buffer_id, DAddr device_addr, u64
                     std::scoped_lock lock{nx2_list_mutex};
                     Nx2ListPage& entry = nx2_list_pages[page_addr];
                     ++entry.writes;
+                    Nx2MarkListWords(
+                        entry, (std::max)(device_addr, page_addr) - page_addr,
+                        (std::min)(device_addr + size, page_addr + (DAddr{1} << page_bits)) -
+                            page_addr,
+                        true);
                     if (!nx2_collect_list_copies && !entry.draw_written) {
                         entry.draw_written = true;
                         LOG_INFO(HW_GPU, "Command list page {:#x} is written by draws too: its "
@@ -3355,8 +3371,11 @@ auto BufferCache<P>::Nx2ReadListCopy(DAddr device_addr, std::span<u8> out, bool 
                 return entry.synced_writes == entry.writes ? Nx2ListRead::Synced
                                                            : Nx2ListRead::Unknown;
             }
-            // Pages the CPU writes the lists of (GPU-written once, long before) stay synced.
-            if (entry.synced_writes == entry.writes) {
+            // Pages the CPU writes the lists of (GPU-written once, long before) stay synced, and
+            // a list on none of the words GPU work wrote since the page was flushed is in guest
+            // memory too: it waits for no copy.
+            if (entry.synced_writes == entry.writes ||
+                (entry.flushed && !Nx2HasListWords(entry, offset, offset + out.size()))) {
                 return Nx2ListRead::Synced;
             }
             if (!current(entry)) {
@@ -3364,7 +3383,7 @@ auto BufferCache<P>::Nx2ReadListCopy(DAddr device_addr, std::span<u8> out, bool 
             }
             // The lists after the first of a batch find the copy done: read it at once.
             if (runtime.IsFree(entry.copy_tick)) {
-                std::memcpy(out.data(), entry.copy->mapped_span.data() + offset, out.size());
+                Nx2ReadListWords(entry, device_addr, offset, out);
                 return Nx2ListRead::Copied;
             }
             tick = entry.copy_tick;
@@ -3382,9 +3401,61 @@ auto BufferCache<P>::Nx2ReadListCopy(DAddr device_addr, std::span<u8> out, bool 
             it->second.copy_writes != writes) {
             return Nx2ListRead::Unknown;
         }
-        std::memcpy(out.data(), it->second.copy->mapped_span.data() + offset, out.size());
+        Nx2ReadListWords(it->second, device_addr, offset, out);
         return Nx2ListRead::Copied;
     }
+}
+
+template <class P>
+void BufferCache<P>::Nx2ReadListWords(const Nx2ListPage& entry, DAddr device_addr, u64 offset,
+                                      std::span<u8> out) {
+    if constexpr (!IS_OPENGL) {
+        // The copy holds the words GPU work wrote. Guest memory holds the others once the page
+        // was flushed: the host wrote them, and the buffer the copy came from need not have had
+        // those writes uploaded.
+        const u8* const copy = entry.copy->mapped_span.data();
+        const u64 end = offset + out.size();
+        bool all_gpu = true;
+        for (u64 word = offset / 4; word < (end + 3) / 4 && all_gpu; ++word) {
+            all_gpu = entry.gpu_words.test(static_cast<size_t>(word));
+        }
+        if (all_gpu || !entry.flushed) {
+            std::memcpy(out.data(), copy + offset, out.size());
+            return;
+        }
+        device_memory.ReadBlockUnsafe(device_addr, out.data(), out.size());
+        for (u64 byte = offset; byte < end;) {
+            const u64 next = (std::min)((byte / 4 + 1) * 4, end);
+            if (entry.gpu_words.test(static_cast<size_t>(byte / 4))) {
+                std::memcpy(out.data() + (byte - offset), copy + byte, next - byte);
+            }
+            byte = next;
+        }
+    }
+}
+
+template <class P>
+void BufferCache<P>::Nx2MarkListWords(Nx2ListPage& entry, u64 begin, u64 end, bool set) {
+    if (begin >= end) {
+        return;
+    }
+    // Words GPU work may have written in part count whole; the host clears only whole words.
+    const u64 first = set ? begin / 4 : (begin + 3) / 4;
+    const u64 last = (std::min<u64>)(set ? (end + 3) / 4 : end / 4, Nx2ListPageWords);
+    for (u64 word = first; word < last; ++word) {
+        entry.gpu_words.set(static_cast<size_t>(word), set);
+    }
+}
+
+template <class P>
+bool BufferCache<P>::Nx2HasListWords(const Nx2ListPage& entry, u64 begin, u64 end) {
+    const u64 last = (std::min<u64>)((end + 3) / 4, Nx2ListPageWords);
+    for (u64 word = begin / 4; word < last; ++word) {
+        if (entry.gpu_words.test(static_cast<size_t>(word))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 template <class P>
@@ -3393,6 +3464,8 @@ void BufferCache<P>::Nx2NoteListSynced(DAddr page) {
         std::scoped_lock lock{nx2_list_mutex};
         Nx2ListPage& entry = nx2_list_pages[page];
         entry.synced_writes = entry.writes;
+        entry.gpu_words.reset();
+        entry.flushed = true;
     }
 }
 
@@ -3420,6 +3493,8 @@ void BufferCache<P>::Nx2FlushListPages(std::span<const DAddr> pages) {
             const auto it = nx2_list_pages.find(page);
             if (it != nx2_list_pages.end() && it->second.writes == writes) {
                 it->second.synced_writes = writes;
+                it->second.gpu_words.reset();
+                it->second.flushed = true;
             }
         }
     }
@@ -3441,7 +3516,8 @@ void BufferCache<P>::Nx2NoteListHostWrite(DAddr device_addr, u64 size) {
                 continue;
             }
             std::scoped_lock lock{nx2_list_mutex};
-            const auto it = nx2_list_pages.find(page << page_bits);
+            const DAddr page_addr = page << page_bits;
+            const auto it = nx2_list_pages.find(page_addr);
             if (it == nx2_list_pages.end()) {
                 continue;
             }
@@ -3451,6 +3527,10 @@ void BufferCache<P>::Nx2NoteListHostWrite(DAddr device_addr, u64 size) {
             if (synced) {
                 entry.synced_writes = entry.writes;
             }
+            Nx2MarkListWords(entry, (std::max)(device_addr, page_addr) - page_addr,
+                             (std::min)(device_addr + size, page_addr + (DAddr{1} << page_bits)) -
+                                 page_addr,
+                             false);
         }
     }
 }
@@ -4150,14 +4230,15 @@ void BufferCache<P>::TraceTablePointer(bool compute, size_t stage, size_t ssbo_i
 
 template <class P>
 Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index, bool is_written,
-                                             bool native_pointer, bool table_pointer) const {
+                                             bool native_pointer, bool table_pointer,
+                                             bool mapping_sized) const {
     const GPUVAddr gpu_addr = gpu_memory->Read<u64>(ssbo_addr);
 
     if (gpu_addr == 0) {
         return NULL_BINDING;
     }
 
-    const bool reads_size_word = !(table_pointer && !is_written) && !native_pointer;
+    const bool reads_size_word = !(table_pointer && !is_written) && !mapping_sized;
     const u64 next_qword = reads_size_word ? gpu_memory->Read<u64>(ssbo_addr + 8) : 0;
     const u32 alignment = runtime.GetStorageBufferAlignment();
     struct CachedBinding {
@@ -4172,7 +4253,8 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
     constexpr size_t ways = 4;
     thread_local std::array<std::array<CachedBinding, ways>, 512> binding_cache{};
     const u32 flags =
-        (is_written ? 1U : 0U) | (native_pointer ? 2U : 0U) | (table_pointer ? 4U : 0U);
+        (is_written ? 1U : 0U) | (native_pointer ? 2U : 0U) | (table_pointer ? 4U : 0U) |
+        (mapping_sized ? 8U : 0U);
     const size_t owner = gpu_memory->GetID() + 1;
     const u64 serial = gpu_memory->MapSerial();
     auto& set = binding_cache[((gpu_addr ^ next_qword ^ flags) * 0x9E3779B97F4A7C15ULL) >> 55];
@@ -4205,7 +4287,7 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
             // A native (Switch 2) compute program's pointer is bare: the word after it is another
             // parameter (a dimension, stride or texture handle), not an NVN buffer size. Taking it
             // as one bound Fortune's Weave's DLSS input features to 266 bytes and dropped the rest.
-            if (native_pointer) {
+            if (mapping_sized) {
                 return (std::min)(memory_layout_size, static_cast<u32>(8_MiB));
             }
             const u32 packed_size = static_cast<u32>(next_qword);

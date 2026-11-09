@@ -7,6 +7,14 @@ on:
         description: Publish the binaries as a GitHub release
         type: boolean
         default: true
+      windows_cpu_preset:
+        description: CPU the Windows builds target (YUZU_BUILD_PRESET); zen3 runs only on Zen 3 or newer
+        type: choice
+        options:
+          - custom
+          - v3
+          - zen3
+        default: custom
   push:
     branches:
       - nx2-experimental
@@ -318,6 +326,7 @@ jobs:
             -DENABLE_UPDATE_CHECKER=ON \
             -DLICHII_BUILD_TAG=build-${{ github.run_number }} \
             -DLICHII_BUILD_PLATFORM=${{ matrix.platform }} \
+            -DYUZU_BUILD_PRESET=${{ inputs.windows_cpu_preset || 'custom' }} \
             -DUSE_DISCORD_PRESENCE=OFF \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \

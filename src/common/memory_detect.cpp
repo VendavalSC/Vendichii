@@ -81,14 +81,22 @@ const MemoryInfo& GetMemInfo() {
 ProcessMemoryUsage GetProcessMemoryUsage() {
     ProcessMemoryUsage usage{};
 #ifdef _WIN32
+#ifdef _MSC_VER
     PROCESS_MEMORY_COUNTERS_EX2 counters{};
+#else
+    PROCESS_MEMORY_COUNTERS_EX counters{};
+#endif
     counters.cb = sizeof(counters);
     if (GetProcessMemoryInfo(GetCurrentProcess(),
                              reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
                              sizeof(counters))) {
         usage.commit = counters.PrivateUsage;
         usage.working_set = counters.WorkingSetSize;
+#ifdef _MSC_VER
         usage.private_working_set = counters.PrivateWorkingSetSize;
+#else
+        usage.private_working_set = counters.PrivateUsage;
+#endif
     }
     PERFORMANCE_INFORMATION performance{};
     performance.cb = sizeof(performance);

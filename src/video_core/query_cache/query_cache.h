@@ -284,8 +284,16 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
     u8* pointer = impl->device_memory.template GetPointer<u8>(cpu_addr);
     u8* pointer_timestamp = impl->device_memory.template GetPointer<u8>(cpu_addr + 8);
     const u64 report_size = has_timestamp ? 16 : 4;
+    const bool low_accuracy = Settings::IsGPUFenceBehaviorDefault()
+                                  ? !Settings::IsGPULevelHigh()
+                                  : !Settings::IsGPUFenceBehaviorBalanced() &&
+                                        !Settings::IsGPUFenceBehaviorAccurate();
+    // A payload release writes a constant: at low accuracy with Default fences, keep it
+    // synchronized as before #337 so channels do not wait on the host GPU.
+    const bool payload_release = is_fence && counter_type == QueryType::Payload && low_accuracy;
     const bool immediate =
-        !is_fence && !Settings::IsGPULevelHigh() && counter_type == QueryType::Payload;
+        (!is_fence || payload_release) && !Settings::IsGPULevelHigh() &&
+        counter_type == QueryType::Payload;
     // Written later: the buffer cache keeps GPU writes over it until then (NoteReportPending).
     const bool report_noted =
         !immediate && impl->rasterizer.NoteReportPending(cpu_addr, report_size);
@@ -353,7 +361,7 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
         }
         impl->pending_unregister.push_back(query_location);
     });
-    if (is_fence) {
+    if (is_fence && !payload_release) {
         VideoCore::g_signaling_query_report_fence = true;
         impl->rasterizer.SignalFence(std::move(operation));
         VideoCore::g_signaling_query_report_fence = false;

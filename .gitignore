@@ -67,3 +67,12 @@ vulkansdk*.exe
 
 # Build-time generated external sources
 externals/generated
+
+# Local build output and diagnostics
+build-*.log
+*.rdc
+*.dmp
+Lossless.dll
+nx2_switches.local.txt
+dist-local/
+tools/superbuild/local/

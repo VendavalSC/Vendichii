@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <filesystem>
+#include <utility>
 #include <QTimer>
 #include <QEventLoop>
 #include <QCoreApplication>
