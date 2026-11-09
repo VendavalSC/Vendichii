@@ -16,7 +16,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   Windows high-resolution waitable timer and updater download retries.
 - v32 is no longer offered; it was based on an older nx2 and some AMD users
   reported broken graphics. v31 remains a fallback.
-- Windows and Linux, standard and PGO.
+- Windows and Linux, standard and PGO; macOS arm64 `.zip` / `.dmg`.
 
 ## v32
 
