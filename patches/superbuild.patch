@@ -180,7 +180,7 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..a4cf2241f8 100644
+index bc40878ce6..1ba88740cc 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
 @@ -1,11 +1,290 @@
@@ -206,7 +206,7 @@ index bc40878ce6..a4cf2241f8 100644
 +  documented in `nx2_switches.txt`. It is off by default: the upstream reporter
 +  did not open a PR for it and batching helps other titles. Uncomment to try it.
 +- Full v34 feature set included.
-+- Windows and Linux, standard and PGO; macOS arm64 `.zip` / `.dmg`.
++- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
 +## v34
  
 -- Initial release candidate

@@ -15,7 +15,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   documented in `nx2_switches.txt`. It is off by default: the upstream reporter
   did not open a PR for it and batching helps other titles. Uncomment to try it.
 - Full v34 feature set included.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip` / `.dmg`.
+- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
 ## v34
 
 - **Big frame-rate gain.** #1028 async read-back measured at Ocarina of Time
