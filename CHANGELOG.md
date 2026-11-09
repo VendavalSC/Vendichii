@@ -2,6 +2,14 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v31
+
+- Based on zortos `nx2` `cbb512ee`: #932 fixes the macOS build type mismatch in
+  `GetSubmappedDeviceRange`, and #918 makes `Log2Ceil(0)` use the smallest
+  bucket instead of wrapping.
+- Includes #874 payload-release fix and #910/#921 OoT crash fixes.
+- Includes the full v30 feature set.
+- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 ## v30
 
 - Based on zortos `nx2` `1c25fbdf`, including #921 (fast-draw and texture-memo

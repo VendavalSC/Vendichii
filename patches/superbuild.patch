@@ -180,10 +180,10 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..dd721591e2 100644
+index bc40878ce6..5787c8176b 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,233 @@
+@@ -1,11 +1,241 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -192,9 +192,18 @@ index bc40878ce6..dd721591e2 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v30
++## v31
  
 -## [0.1.0]
++- Based on zortos `nx2` `cbb512ee`: #932 fixes the macOS build type mismatch in
++  `GetSubmappedDeviceRange`, and #918 makes `Log2Ceil(0)` use the smallest
++  bucket instead of wrapping.
++- Includes #874 payload-release fix and #910/#921 OoT crash fixes.
++- Includes the full v30 feature set.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
++## v30
+ 
+-- Initial release candidate
 +- Based on zortos `nx2` `1c25fbdf`, including #921 (fast-draw and texture-memo
 +  paths now match a full resolve, closing the remaining #858 crash class) and
 +  #912 (dav1d keeps its default thread count).
@@ -203,8 +212,7 @@ index bc40878ce6..dd721591e2 100644
 +- Includes the #910 OoT texture-memo crash fix and the full v29 feature set.
 +- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
 +## v29
- 
--- Initial release candidate
++
 +- Adds #874: fence-flagged payload releases stay synchronized at low
 +  accuracy/Default fences, restoring Ocarina of Time performance after #337.
 +- Based on v28 / zortos `nx2` `c2e293ec`; includes the #910 OoT texture-memo
@@ -559,16 +567,16 @@ index 0000000000..a0496b95b6
 +expose the port to a network. Dumps and captures can contain game assets; keep
 +them local and do not upload `.rdc` captures or dumps publicly.
 diff --git a/README.md b/README.md
-index 0caad38d8b..0dc6f64202 100644
+index 0caad38d8b..c28db6d8ea 100644
 --- a/README.md
 +++ b/README.md
 @@ -12,6 +12,16 @@
  
  # Lichii
  
-+> ## ✅ v30 recommended
++> ## ✅ v31 recommended
 +>
-+> v30 includes the #874 payload-release fix and the #910/#921 Ocarina of Time crash fixes, based on zortos `nx2` `1c25fbdf`. v29, v28 and v24 remain available as fallbacks.
++> v31 includes the #874 payload-release fix and the #910/#921/#932 fixes, based on zortos `nx2` `cbb512ee`. v30, v29, v28 and v24 remain available as fallbacks.
 +
 +> **Unofficial superbuild fork.** This repository is not official Lichii and is
 +> not affiliated with zortos293. It carries a curated set of performance and
@@ -581,15 +589,15 @@ index 0caad38d8b..0dc6f64202 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..a2dc978fe8
+index 0000000000..ec70a66143
 --- /dev/null
 +++ b/SUPERBUILD.md
 @@ -0,0 +1,215 @@
 +# Lichii Superbuild (unofficial)
 +
-+> ## ✅ v30 recommended
++> ## ✅ v31 recommended
 +>
-+> v30 is based on zortos `nx2` `1c25fbdf`, includes #874 and the #910/#921 Ocarina of Time crash fixes, and is the current recommended release. v29/v28/v24 remain fallbacks.
++> v31 is based on zortos `nx2` `cbb512ee`, includes #874, #910/#921 and #932, and is the current recommended release. v30/v29/v28/v24 remain fallbacks.
 +
 +## Credits
 +
@@ -616,7 +624,7 @@ index 0000000000..a2dc978fe8
 +
 +- Upstream: `zortos293/Lichii`
 +- Branch: `nx2`
-+- Base commit: `1c25fbdfb47339bf709c23a5111fce7916b6ff81` (2026-11-08).
++- Base commit: `cbb512ee7a9de9d9dbe2f865ec2e468888503214` (2026-11-08).
 +  The grass/foliage fix is now upstream as #551, so the 14-commit
 +  `capy/oot-hyrule-grass-fix` series is no longer carried.
 +- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -797,7 +805,7 @@ index 0000000000..a2dc978fe8
 +`superbuild`.
 +
 +```bash
-+git checkout 1c25fbdf
++git checkout cbb512ee
 +git apply patches/superbuild.patch
 +```
 diff --git a/dist/nx2_switches.txt b/dist/nx2_switches.txt
@@ -1277,7 +1285,7 @@ index 78927cd2c0..4373af1bb4 100644
             tr("Changes the output graphics API.\nVulkan is recommended."));
      INSERT(Settings, vulkan_device, tr("Device:"),
 diff --git a/src/tests/CMakeLists.txt b/src/tests/CMakeLists.txt
-index e68af6f3e5..adb94a5270 100644
+index 0bb8347c75..6dedea3cba 100644
 --- a/src/tests/CMakeLists.txt
 +++ b/src/tests/CMakeLists.txt
 @@ -84,6 +84,7 @@ add_executable(tests
@@ -1844,22 +1852,6 @@ index 0000000000..e95883e377
 +    vec3 change = abs(after - before);
 +    imageStore(effects, pixel, vec4(smoothstep(0.02, 0.08, max(change.r, max(change.g, change.b)))));
 +}
-diff --git a/src/video_core/memory_manager.cpp b/src/video_core/memory_manager.cpp
-index b5b513a56a..78de12a9b5 100644
---- a/src/video_core/memory_manager.cpp
-+++ b/src/video_core/memory_manager.cpp
-@@ -953,8 +953,9 @@ boost::container::small_vector<std::pair<DAddr, std::size_t>, 32>
- MemoryManager::GetSubmappedDeviceRange(GPUVAddr gpu_addr, std::size_t size) const {
-     boost::container::small_vector<std::pair<DAddr, std::size_t>, 32> result{};
-     if (IsWithinGPUAddressRange(gpu_addr)) {
--        GetSubmappedRangeImpl<false>(gpu_addr, (std::min)(size, address_space_size - gpu_addr),
--                                     result);
-+        GetSubmappedRangeImpl<false>(
-+            gpu_addr, std::min(size, static_cast<std::size_t>(address_space_size - gpu_addr)),
-+            result);
-     }
-     return result;
- }
 diff --git a/src/video_core/nx2.h b/src/video_core/nx2.h
 index 2ed45f2889..8464c03982 100644
 --- a/src/video_core/nx2.h
