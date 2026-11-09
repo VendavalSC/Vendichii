@@ -9,7 +9,7 @@ All releases are unofficial builds. See the GitHub releases for assets and check
   bucket instead of wrapping.
 - Includes #874 payload-release fix and #910/#921 OoT crash fixes.
 - Includes the full v30 feature set.
-- Windows and Linux, standard and PGO; macOS arm64 `.zip`/`.dmg`.
+- Windows and Linux, standard and PGO.
 ## v30
 
 - Based on zortos `nx2` `1c25fbdf`, including #921 (fast-draw and texture-memo
