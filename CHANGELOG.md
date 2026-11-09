@@ -2,6 +2,27 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v36
+
+- **Big frame-rate gain.** #1056 runs the macros that read memory on the split's
+  back: Ocarina of Time's render-enable macro makes ~25,000 MME DMA reads a
+  second in Hyrule Field, and each waited on the split's front — 252.8 ms of
+  every second of a front that was 99.9% busy. Those macro calls now run on the
+  back, at the point of the method stream the read needs. Command-list fetches
+  also wait only for the work before the last host sync instead of every writer
+  (~7,500 waits a second, 142 ms a second). Both are the largest OoT gains since
+  #1028, on top of the ~12 fps #1028 + #874 already give.
+- **Ocarina of Time: AMD FSR 3.1 (#1060)** replaces the game's own
+  anti-aliasing network, with the game's camera and actor motion as input and
+  the effects bias mask fed to FSR as its reactive and transparency masks.
+  Optional, off by default. This upstreams our #635 glow/particle history fix
+  and the R16F bias mask, so those are no longer local patches.
+- Based on latest zortos `nx2` `c215653cc5`; shader cache v2 (#1036) and the
+  per-frame stutter trace (#1039) from v35 stay in.
+- Full v35 feature set included, including #874, native HDR, the DLSS presets
+  E/F and the optional `EDEN_NX2_FENCE_FLUSH_US=0` white-flash mitigation.
+- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
+
 ## v35
 
 - **Big frame-rate gain kept.** #1028 async read-back plus the #874 payload-release

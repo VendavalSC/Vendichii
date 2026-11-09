@@ -180,10 +180,10 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..1ba88740cc 100644
+index bc40878ce6..7d7b3569a7 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,290 @@
+@@ -1,11 +1,311 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -192,9 +192,31 @@ index bc40878ce6..1ba88740cc 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v35
++## v36
  
 -## [0.1.0]
++- **Big frame-rate gain.** #1056 runs the macros that read memory on the split's
++  back: Ocarina of Time's render-enable macro makes ~25,000 MME DMA reads a
++  second in Hyrule Field, and each waited on the split's front — 252.8 ms of
++  every second of a front that was 99.9% busy. Those macro calls now run on the
++  back, at the point of the method stream the read needs. Command-list fetches
++  also wait only for the work before the last host sync instead of every writer
++  (~7,500 waits a second, 142 ms a second). Both are the largest OoT gains since
++  #1028, on top of the ~12 fps #1028 + #874 already give.
++- **Ocarina of Time: AMD FSR 3.1 (#1060)** replaces the game's own
++  anti-aliasing network, with the game's camera and actor motion as input and
++  the effects bias mask fed to FSR as its reactive and transparency masks.
++  Optional, off by default. This upstreams our #635 glow/particle history fix
++  and the R16F bias mask, so those are no longer local patches.
++- Based on latest zortos `nx2` `c215653cc5`; shader cache v2 (#1036) and the
++  per-frame stutter trace (#1039) from v35 stay in.
++- Full v35 feature set included, including #874, native HDR, the DLSS presets
++  E/F and the optional `EDEN_NX2_FENCE_FLUSH_US=0` white-flash mitigation.
++- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
+ 
+-- Initial release candidate
++## v35
++
 +- **Big frame-rate gain kept.** #1028 async read-back plus the #874 payload-release
 +  fix give OoT roughly 12 fps over builds without them (Kokiri Forest 28.2 ->
 +  32.9 fps measured on 5900X + RTX 3080).
@@ -208,8 +230,7 @@ index bc40878ce6..1ba88740cc 100644
 +- Full v34 feature set included.
 +- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
 +## v34
- 
--- Initial release candidate
++
 +- **Big frame-rate gain.** #1028 async read-back measured at Ocarina of Time
 +  Kokiri Forest 28.2 -> 32.9 fps (+17%), p90 frame time 38.0 -> 32.8 ms on a
 +  5900X + RTX 3080; combined with the #874 payload-release fix from v29, OoT
@@ -616,16 +637,16 @@ index 0000000000..a0496b95b6
 +expose the port to a network. Dumps and captures can contain game assets; keep
 +them local and do not upload `.rdc` captures or dumps publicly.
 diff --git a/README.md b/README.md
-index 0caad38d8b..a1aca03250 100644
+index 9230cf33b0..0d02ff32a0 100644
 --- a/README.md
 +++ b/README.md
-@@ -12,6 +12,16 @@
+@@ -17,6 +17,16 @@
  
  # Lichii
  
-+> ## ✅ v35 recommended
++> ## ✅ v36 recommended
 +>
-+> v35 includes the #874 payload-release fix, based on zortos `nx2` `0ab7736d` with shader cache v2 and async read-back. v32 was removed for AMD graphics issues; v34, v31, v30, v29, v28 and v24 remain available as fallbacks.
++> v36 includes the #874 payload-release fix, based on zortos `nx2` `c215653cc5` with the back-macro speedup, OoT FSR 3.1, shader cache v2 and async read-back. v32 was removed for AMD graphics issues; v35, v34, v31, v30, v29, v28 and v24 remain available as fallbacks.
 +
 +> **Unofficial superbuild fork.** This repository is not official Lichii and is
 +> not affiliated with zortos293. It carries a curated set of performance and
@@ -638,15 +659,15 @@ index 0caad38d8b..a1aca03250 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..7399851f13
+index 0000000000..9e5e4bdcb4
 --- /dev/null
 +++ b/SUPERBUILD.md
 @@ -0,0 +1,215 @@
 +# Lichii Superbuild (unofficial)
 +
-+> ## ✅ v35 recommended
++> ## ✅ v36 recommended
 +>
-+> v35 is based on zortos `nx2` `0ab7736d` (shader cache v2 #1036, async read-back #1028) and includes #874. v32 was removed for AMD graphics issues; v34/v31/v30/v29/v28/v24 remain fallbacks.
++> v36 is based on zortos `nx2` `c215653cc5` (#1056 back macros, #1060 OoT FSR 3.1, shader cache v2 #1036, async read-back #1028) and includes #874. v32 was removed for AMD graphics issues; v35/v34/v31/v30/v29/v28/v24 remain fallbacks.
 +
 +## Credits
 +
@@ -673,7 +694,7 @@ index 0000000000..7399851f13
 +
 +- Upstream: `zortos293/Lichii`
 +- Branch: `nx2`
-+- Base commit: `0ab7736df9dba2b396d2c7a26bd26fbb9b7b0dc0` (2026-11-08).
++- Base commit: `c215653cc542ae4c680dff3f75ff3e8000c77716` (2026-11-08).
 +  The grass/foliage fix is now upstream as #551, so the 14-commit
 +  `capy/oot-hyrule-grass-fix` series is no longer carried.
 +- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -1031,7 +1052,7 @@ index 140225da07..cc24eacf2f 100644
      }
      return {};
 diff --git a/src/common/settings.h b/src/common/settings.h
-index 5e709f9aaa..17efec35cf 100644
+index aa31b067da..359bd05df9 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -339,6 +339,11 @@ struct Values {
@@ -1557,7 +1578,7 @@ index 94ee0b33a6..c0a57a100a 100644
      }
      return number;
 diff --git a/src/qt_common/config/shared_translation.cpp b/src/qt_common/config/shared_translation.cpp
-index 78927cd2c0..4373af1bb4 100644
+index 1138c9dbae..98c12bffbd 100644
 --- a/src/qt_common/config/shared_translation.cpp
 +++ b/src/qt_common/config/shared_translation.cpp
 @@ -142,6 +142,23 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
@@ -1585,7 +1606,7 @@ index 78927cd2c0..4373af1bb4 100644
             tr("Changes the output graphics API.\nVulkan is recommended."));
      INSERT(Settings, vulkan_device, tr("Device:"),
 diff --git a/src/tests/CMakeLists.txt b/src/tests/CMakeLists.txt
-index 1d01c034cb..e05984bd31 100644
+index 1e97cc9eb2..b63e8f1581 100644
 --- a/src/tests/CMakeLists.txt
 +++ b/src/tests/CMakeLists.txt
 @@ -90,6 +90,7 @@ add_executable(tests
@@ -1931,10 +1952,10 @@ index 55988006d7..e943937209 100644
      void OnCommandListEnd();
  
 diff --git a/src/video_core/gpu_split.cpp b/src/video_core/gpu_split.cpp
-index 940ccacab1..40812dc11d 100644
+index 2a7e43885d..327670dc06 100644
 --- a/src/video_core/gpu_split.cpp
 +++ b/src/video_core/gpu_split.cpp
-@@ -684,4 +684,4 @@ void GpuSplit::ReportAcquire() {
+@@ -689,4 +689,4 @@ void GpuSplit::ReportAcquire() {
      }
  }
  
@@ -1953,19 +1974,6 @@ index 00d931cb53..5453806192 100644
          Common::SetCurrentThreadPriority(Common::ThreadPriority::Critical);
          Common::SetCurrentThreadToPerformanceCores();
          if (Settings::values.pin_gpu_threads.GetValue()) {
-diff --git a/src/video_core/host_shaders/CMakeLists.txt b/src/video_core/host_shaders/CMakeLists.txt
-index 7cff85d663..8301029127 100644
---- a/src/video_core/host_shaders/CMakeLists.txt
-+++ b/src/video_core/host_shaders/CMakeLists.txt
-@@ -108,6 +108,8 @@ set(SHADER_FILES
-     ${CMAKE_CURRENT_SOURCE_DIR}/ocarina_dlss_output.comp
-     ${CMAKE_CURRENT_SOURCE_DIR}/ocarina_dlss_4k_composite.comp
-     ${CMAKE_CURRENT_SOURCE_DIR}/ocarina_dlss_4k_reference.comp
-+    ${CMAKE_CURRENT_SOURCE_DIR}/ocarina_dlss_effects.comp
-+    ${CMAKE_CURRENT_SOURCE_DIR}/ocarina_dlss_bias.comp
- )
- 
- if (HAIKUOS)
 diff --git a/src/video_core/host_shaders/astc_decoder.comp b/src/video_core/host_shaders/astc_decoder.comp
 index c6d5a96d14..9266fc8a7f 100644
 --- a/src/video_core/host_shaders/astc_decoder.comp
@@ -2052,73 +2060,6 @@ index 8dfaf0cd1a..9df13369c2 100644
 +    }
      imageStore(output_image, coord, texel);
  }
-diff --git a/src/video_core/host_shaders/ocarina_dlss_bias.comp b/src/video_core/host_shaders/ocarina_dlss_bias.comp
-new file mode 100644
-index 0000000000..ecb4c98b66
---- /dev/null
-+++ b/src/video_core/host_shaders/ocarina_dlss_bias.comp
-@@ -0,0 +1,35 @@
-+// SPDX-License-Identifier: GPL-3.0-or-later
-+#version 450
-+
-+layout(local_size_x = 8, local_size_y = 8) in;
-+layout(binding = 0) uniform sampler2D current_effects;
-+layout(binding = 1) uniform sampler2D previous_effects;
-+layout(binding = 2) uniform sampler2D motion;
-+layout(binding = 3, r16f) uniform writeonly image2D bias;
-+layout(push_constant) uniform Controls { uint has_previous; } controls;
-+
-+float Nearby(sampler2D effects, ivec2 center) {
-+    ivec2 last = textureSize(effects, 0) - 1;
-+    float value = 0.0;
-+    for (int y = -1; y <= 1; ++y) {
-+        for (int x = -1; x <= 1; ++x) {
-+            value = max(value, texelFetch(effects, clamp(center + ivec2(x, y), ivec2(0), last), 0).r);
-+        }
-+    }
-+    return value;
-+}
-+
-+void main() {
-+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-+    if (any(greaterThanEqual(pixel, imageSize(bias)))) {
-+        return;
-+    }
-+    // Glows and particles have no motion of their own: use them as drawn this frame, and drop
-+    // the history DLSS would read where they were drawn last frame.
-+    float value = Nearby(current_effects, pixel);
-+    if (controls.has_previous != 0) {
-+        vec2 history = vec2(pixel) + 0.5 + texelFetch(motion, pixel, 0).rg;
-+        value = max(value, Nearby(previous_effects, ivec2(floor(history))));
-+    }
-+    imageStore(bias, pixel, vec4(value));
-+}
-diff --git a/src/video_core/host_shaders/ocarina_dlss_effects.comp b/src/video_core/host_shaders/ocarina_dlss_effects.comp
-new file mode 100644
-index 0000000000..e95883e377
---- /dev/null
-+++ b/src/video_core/host_shaders/ocarina_dlss_effects.comp
-@@ -0,0 +1,20 @@
-+// SPDX-License-Identifier: GPL-3.0-or-later
-+#version 450
-+
-+layout(local_size_x = 8, local_size_y = 8) in;
-+layout(binding = 0) uniform sampler2D before_effects;
-+layout(binding = 1) uniform sampler2D after_effects;
-+layout(binding = 2, r8) uniform writeonly image2D effects;
-+
-+void main() {
-+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
-+    if (any(greaterThanEqual(pixel, imageSize(effects)))) {
-+        return;
-+    }
-+    // Compare in the square-root encoding the guest hands its anti-aliasing, so a glow over a
-+    // dark forest counts as much as one over a bright sky.
-+    vec3 before = sqrt(max(texelFetch(before_effects, pixel, 0).rgb, vec3(0.0)));
-+    vec3 after = sqrt(max(texelFetch(after_effects, pixel, 0).rgb, vec3(0.0)));
-+    vec3 change = abs(after - before);
-+    imageStore(effects, pixel, vec4(smoothstep(0.02, 0.08, max(change.r, max(change.g, change.b)))));
-+}
 diff --git a/src/video_core/host_shaders/pitch_unswizzle.comp b/src/video_core/host_shaders/pitch_unswizzle.comp
 index 7d23f594c7..49196f21ee 100644
 --- a/src/video_core/host_shaders/pitch_unswizzle.comp
@@ -2552,250 +2493,6 @@ index 659d0fb5ff..e234b9049f 100644
  
      void PrepareFrame(const Device& device, Frame* frame, const Layout::FramebufferLayout& layout);
  
-diff --git a/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp b/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp
-index ecde60dea3..0a70e85fc4 100644
---- a/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp
-+++ b/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.cpp
-@@ -4,6 +4,7 @@
- #include <algorithm>
- #include <cmath>
- #include <cstring>
-+#include <optional>
- 
- #ifdef EGLANTINE_STREAMLINE
- #include "common/logging.h"
-@@ -11,6 +12,8 @@
- #include "video_core/host_shaders/ocarina_dlss_output_comp_spv.h"
- #include "video_core/host_shaders/ocarina_dlss_4k_composite_comp_spv.h"
- #include "video_core/host_shaders/ocarina_dlss_4k_reference_comp_spv.h"
-+#include "video_core/host_shaders/ocarina_dlss_bias_comp_spv.h"
-+#include "video_core/host_shaders/ocarina_dlss_effects_comp_spv.h"
- #include "video_core/renderer_vulkan/vk_master_semaphore.h"
- #include "video_core/renderer_vulkan/vk_streamline_dlss.h"
- 
-@@ -528,7 +531,71 @@ private:
-     bool logged{};
- };
- 
-+/// Reads Inputs images with texelFetch and writes one storage image of the same size.
-+template <u32 Inputs>
-+class OcarinaEffectsPass final : public ComputePass {
-+    static constexpr auto bindings = [] {
-+        std::array<VkDescriptorSetLayoutBinding, Inputs + 1> result{};
-+        for (u32 i = 0; i <= Inputs; ++i) {
-+            result[i] = {i, i == Inputs ? VK_DESCRIPTOR_TYPE_STORAGE_IMAGE :
-+                                         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-+                         1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
-+        }
-+        return result;
-+    }();
-+    static constexpr auto templates = [] {
-+        std::array<VkDescriptorUpdateTemplateEntry, Inputs + 1> result{};
-+        for (u32 i = 0; i <= Inputs; ++i) {
-+            result[i] = {i, 0, 1, bindings[i].descriptorType,
-+                         i * sizeof(DescriptorUpdateEntry), sizeof(DescriptorUpdateEntry)};
-+        }
-+        return result;
-+    }();
-+    static constexpr DescriptorBankInfo bank{.textures = Inputs, .images = 1, .score = Inputs + 1};
-+    static constexpr std::array push{
-+        VkPushConstantRange{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(u32)}};
-+
-+public:
-+    OcarinaEffectsPass(const Device& device_, Scheduler& scheduler, DescriptorPool& pool,
-+                       std::span<const u32> code)
-+        : ComputePass(device_, scheduler, pool, bindings, templates, bank, push, code) {}
-+
-+    void Record(Scheduler& scheduler, const void* descriptors, VkImage output, VkExtent2D extent,
-+                u32 control = 0) {
-+        scheduler.Record([this, descriptors, output, extent, control](vk::CommandBuffer cmd) {
-+            const VkMemoryBarrier inputs{
-+                .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-+                .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-+                .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-+            };
-+            const auto prepare = ProbeBarrier(output, VK_ACCESS_MEMORY_READ_BIT |
-+                                                          VK_ACCESS_MEMORY_WRITE_BIT,
-+                                              VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-+                                              VK_IMAGE_LAYOUT_GENERAL);
-+            cmd.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-+                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, inputs, {}, prepare);
-+            const VkDescriptorSet set = descriptor_allocator.Commit();
-+            device.GetLogical().UpdateDescriptorSet(set, *descriptor_template, descriptors);
-+            cmd.BindPipeline(VK_PIPELINE_BIND_POINT_COMPUTE, *pipeline);
-+            cmd.BindDescriptorSets(VK_PIPELINE_BIND_POINT_COMPUTE, *layout, 0, set, {});
-+            cmd.PushConstants(*layout, VK_SHADER_STAGE_COMPUTE_BIT, control);
-+            cmd.Dispatch((extent.width + 7) / 8, (extent.height + 7) / 8, 1);
-+            // The game draws over or overwrites the inputs next.
-+            const VkMemoryBarrier complete{
-+                .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-+                .srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-+                .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
-+            };
-+            cmd.PipelineBarrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-+                                VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, complete);
-+        });
-+    }
-+};
-+
- constexpr VkFormat LIVE_COLOR_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
-+constexpr VkFormat EFFECTS_FORMAT = VK_FORMAT_R8_UNORM;
-+// Streamline has no R8_UNORM: it rejects such a mask as "undefined format" and DLSS never sees it.
-+constexpr VkFormat BIAS_FORMAT = VK_FORMAT_R16_SFLOAT;
- 
- vk::Image CreateOcarinaImage(MemoryAllocator& allocator, VkExtent2D extent, VkFormat format,
-                             VkImageUsageFlags usage) {
-@@ -575,6 +642,35 @@ struct OcarinaFrameSlot {
-     std::unique_ptr<ActorOverlay> overlay;
- };
- 
-+/// The scene before its glows and particles, the pixels they changed in the last two frames and
-+/// the DLSS bias mask made from those.
-+struct OcarinaEffects {
-+    OcarinaEffects(const Device& device, MemoryAllocator& allocator, VkExtent2D extent_)
-+        : extent{extent_},
-+          base{CreateOcarinaImage(allocator, extent, LIVE_COLOR_FORMAT, USAGE)},
-+          base_view{CreateOcarinaView(device, *base, LIVE_COLOR_FORMAT)},
-+          marks{CreateOcarinaImage(allocator, extent, EFFECTS_FORMAT, USAGE),
-+                CreateOcarinaImage(allocator, extent, EFFECTS_FORMAT, USAGE)},
-+          mark_views{CreateOcarinaView(device, *marks[0], EFFECTS_FORMAT),
-+                     CreateOcarinaView(device, *marks[1], EFFECTS_FORMAT)},
-+          bias{CreateOcarinaImage(allocator, extent, BIAS_FORMAT, USAGE)},
-+          bias_view{CreateOcarinaView(device, *bias, BIAS_FORMAT)} {}
-+
-+    static constexpr VkImageUsageFlags USAGE =
-+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-+
-+    VkExtent2D extent;
-+    vk::Image base;
-+    vk::ImageView base_view;
-+    std::array<vk::Image, 2> marks;
-+    std::array<vk::ImageView, 2> mark_views;
-+    vk::Image bias;
-+    vk::ImageView bias_view;
-+    std::optional<u64> base_frame;
-+    std::optional<u64> marked_frame;
-+    std::optional<u64> previous_marked_frame;
-+};
-+
- } // namespace
- 
- struct OcarinaLiveDlss::Impl {
-@@ -605,6 +701,10 @@ struct OcarinaLiveDlss::Impl {
-     std::unique_ptr<OcarinaCompositePass> composite_pass;
-     vk::Sampler linear_sampler;
-     std::optional<u64> composited_frame;
-+    std::unique_ptr<OcarinaEffects> effects;
-+    std::unique_ptr<OcarinaEffectsPass<1>> effects_base_pass;
-+    std::unique_ptr<OcarinaEffectsPass<2>> effects_mark_pass;
-+    std::unique_ptr<OcarinaEffectsPass<3>> effects_bias_pass;
- 
-     VkSampler LinearSampler() {
-         if (!linear_sampler) {
-@@ -678,6 +778,53 @@ void OcarinaLiveDlss::Composite4k(VkImageView native_composite, u64 frame) {
-     state.composited_frame = frame;
- }
- 
-+void OcarinaLiveDlss::SaveEffectsBase(VkImageView scene, VkExtent2D extent, u64 frame) {
-+    auto& state = *impl;
-+    if (!state.effects_base_pass) {
-+        state.effects_base_pass = std::make_unique<OcarinaEffectsPass<1>>(
-+            state.device, state.scheduler, state.pool, OCARINA_DLSS_COLOR_COMP_SPV);
-+        state.effects_mark_pass = std::make_unique<OcarinaEffectsPass<2>>(
-+            state.device, state.scheduler, state.pool, OCARINA_DLSS_EFFECTS_COMP_SPV);
-+        state.effects_bias_pass = std::make_unique<OcarinaEffectsPass<3>>(
-+            state.device, state.scheduler, state.pool, OCARINA_DLSS_BIAS_COMP_SPV);
-+    }
-+    if (!state.effects || state.effects->extent.width != extent.width ||
-+        state.effects->extent.height != extent.height) {
-+        if (state.effects) {
-+            state.scheduler.Finish(); // the old images may still be in use
-+        }
-+        state.effects = std::make_unique<OcarinaEffects>(state.device, state.allocator, extent);
-+    }
-+    auto& effects = *state.effects;
-+    state.scheduler.RequestOutsideRenderPassOperationContext();
-+    state.queue.Acquire(state.scheduler, 2);
-+    state.queue.AddSampledImage(scene, state.upscaler.PointSampler());
-+    state.queue.AddImage(*effects.base_view);
-+    state.effects_base_pass->Record(state.scheduler, state.queue.UpdateData(), *effects.base,
-+                                    extent);
-+    state.scheduler.InvalidateState();
-+    effects.base_frame = frame;
-+}
-+
-+void OcarinaLiveDlss::MarkEffects(VkImageView scene, u64 frame) {
-+    auto& state = *impl;
-+    if (!state.effects || state.effects->base_frame != frame) {
-+        return;
-+    }
-+    auto& effects = *state.effects;
-+    const VkSampler sampler = state.upscaler.PointSampler();
-+    state.scheduler.RequestOutsideRenderPassOperationContext();
-+    state.queue.Acquire(state.scheduler, 3);
-+    state.queue.AddSampledImage(*effects.base_view, sampler);
-+    state.queue.AddSampledImage(scene, sampler);
-+    state.queue.AddImage(*effects.mark_views[frame % 2]);
-+    state.effects_mark_pass->Record(state.scheduler, state.queue.UpdateData(),
-+                                    *effects.marks[frame % 2], effects.extent);
-+    state.scheduler.InvalidateState();
-+    effects.previous_marked_frame = effects.marked_frame;
-+    effects.marked_frame = frame;
-+}
-+
- VkImage OcarinaLiveDlss::CompositedImage() const {
-     return *impl->composite;
- }
-@@ -736,6 +883,24 @@ bool OcarinaLiveDlss::Record(VkImageView color, VkImageView depth, VkImageView t
-     state.queue.AddImage(*resources.color_view);
-     state.color_pass.Record(state.scheduler, state.queue.UpdateData(), *resources.color, extent);
- 
-+    std::optional<StreamlineDlssUpscaler::Image> bias;
-+    if (state.effects && state.effects->marked_frame == frame &&
-+        state.effects->extent.width == extent.width &&
-+        state.effects->extent.height == extent.height) {
-+        auto& effects = *state.effects;
-+        const bool has_previous = effects.previous_marked_frame == frame - 1;
-+        state.queue.Acquire(state.scheduler, 4);
-+        state.queue.AddSampledImage(*effects.mark_views[frame % 2], sampler);
-+        const u64 previous_mark = has_previous ? frame - 1 : frame;
-+        state.queue.AddSampledImage(*effects.mark_views[previous_mark % 2], sampler);
-+        state.queue.AddSampledImage(*resources.motion_view, sampler);
-+        state.queue.AddImage(*effects.bias_view);
-+        state.effects_bias_pass->Record(state.scheduler, state.queue.UpdateData(), *effects.bias,
-+                                        extent, has_previous ? 1 : 0);
-+        bias = StreamlineDlssUpscaler::Image{*effects.bias_view, *effects.bias, BIAS_FORMAT,
-+                                             COLOR_RANGE, VK_IMAGE_ASPECT_COLOR_BIT};
-+    }
-+
-     const bool reset = !state.last_frame || frame != *state.last_frame + 1 ||
-                        !std::ranges::equal(previous, state.last_view_projection,
-                                            [](f32 a, f32 b) { return std::abs(a - b) < 0.001f; });
-@@ -752,6 +917,7 @@ bool OcarinaLiveDlss::Record(VkImageView color, VkImageView depth, VkImageView t
-             .reset = reset,
-             .depth_inverted = false,
-             .hdr = false,
-+            .bias_current_color = bias,
-         })) {
-         state.scheduler.InvalidateState();
-         return false;
-diff --git a/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.h b/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.h
-index 697f39f3c7..d6f97a75f3 100644
---- a/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.h
-+++ b/src/video_core/renderer_vulkan/vk_ocarina_camera_motion.h
-@@ -39,6 +39,12 @@ public:
-     void SaveSceneReference(VkImageView color);
-     /// Composite the HUD from the guest image over the matching 4K scene.
-     void Composite4k(VkImageView native_composite, u64 frame);
-+    /// Copy the scene colour once the fog is drawn, before the glows and particles that have no
-+    /// motion vectors of their own.
-+    void SaveEffectsBase(VkImageView scene, VkExtent2D extent, u64 frame);
-+    /// Mark the pixels those glows and particles changed since SaveEffectsBase, so Record can
-+    /// tell DLSS to use this frame's colour there.
-+    void MarkEffects(VkImageView scene, u64 frame);
-     VkImage CompositedImage() const;
-     VkImageView CompositedView() const;
- 
 diff --git a/src/video_core/renderer_vulkan/vk_present_manager.cpp b/src/video_core/renderer_vulkan/vk_present_manager.cpp
 index ea2a913ad8..25d4b5a4fd 100644
 --- a/src/video_core/renderer_vulkan/vk_present_manager.cpp
@@ -3013,82 +2710,10 @@ index ab2b76f10f..67d31cc3a0 100644
      bool use_present_thread;
      std::atomic<std::size_t> image_count{};
 diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-index 23c753049b..d7bf38553b 100644
+index a3ab4052e8..5fa66f40a5 100644
 --- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-@@ -1121,6 +1121,26 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func, bool is_in
-             }
-         }
-     }
-+    // The game draws Navi's glow, fireflies and dust right after the fog. They write no depth and
-+    // move on their own, so DLSS must not take them from its history.
-+    constexpr u64 fog_fragment = 0x3ddfb1d7a854c849ULL;
-+    if (hashes[5] == fog_fragment && oot_live_dlss && OcarinaDlssEnabled() &&
-+        oot_camera_sample_frame == render_trace_frame && !frame_dump.Capturing()) {
-+        const auto scene_id = texture_cache.GetRenderTargets().color_buffer_ids[0];
-+        if (scene_id) {
-+            const auto& scene = texture_cache.GetImageView(scene_id);
-+            if (scene.format == VideoCore::Surface::PixelFormat::B10G11R11_FLOAT &&
-+                scene.size.width == oot_motion.extent.width &&
-+                scene.size.height == oot_motion.extent.height && !scene.IsRescaled() &&
-+                scene.range == VideoCommon::SubresourceRange{}) {
-+                oot_effects_scene = scene.Handle(Shader::TextureType::Color2D);
-+                oot_effects_address = scene.gpu_addr;
-+                oot_effects_frame = render_trace_frame;
-+                oot_live_dlss->SaveEffectsBase(oot_effects_scene, oot_motion.extent,
-+                                               render_trace_frame);
-+            }
-+        }
-+    }
- #endif
-     if (fast_draw_on) {
-         NoteResolvedDraw(pipeline, is_indexed, is_indirect, draw_serial, draw_map_serial);
-@@ -2067,13 +2087,18 @@ void RasterizerVulkan::DispatchCompute() {
- #ifdef EGLANTINE_STREAMLINE
-     const bool can_replace = OcarinaDlssEnabled() && pipeline->CanReplaceOcarinaUpscale() &&
-                              !indirect_address && !frame_dump.Capturing();
-+    // Until a dispatch overwrites the scene, each direct one binds only after the effects are
-+    // marked. The indirect path records its bind at once.
-+    const bool marking_effects = oot_effects_frame == render_trace_frame && OcarinaDlssEnabled() &&
-+                                 !indirect_address && !frame_dump.Capturing();
- #else
-     constexpr bool can_replace = false;
-+    constexpr bool marking_effects = false;
- #endif
-     ComputePipeline::BindCommand deferred_bind;
-     if (!pipeline->Configure(*kepler_compute, *gpu_memory, scheduler, buffer_cache,
-                              texture_cache, texture_cache_runtime, byte_addressed_shadow,
--                             can_replace ? &deferred_bind : nullptr)) {
-+                             can_replace || marking_effects ? &deferred_bind : nullptr)) {
-         if (kepler_compute->IsNativeMode()) throw Shader::RuntimeError("Native compute resources unavailable");
-         return;
-     }
-@@ -2175,6 +2200,15 @@ void RasterizerVulkan::DispatchCompute() {
-     scheduler.RequestOutsideRenderPassOperationContext();
-     record_read_barrier();
- #ifdef EGLANTINE_STREAMLINE
-+    if (marking_effects) {
-+        const auto written = pipeline->WrittenImages();
-+        if (std::ranges::any_of(written, [this](VideoCommon::ImageViewId id) {
-+                return texture_cache.GetImageView(id).gpu_addr == oot_effects_address;
-+            })) {
-+            oot_live_dlss->MarkEffects(oot_effects_scene, render_trace_frame);
-+            oot_effects_frame.reset();
-+        }
-+    }
-     const auto* const replacement =
-         can_replace && !byte_addressed_shadow && TryOcarinaDlss(*pipeline, true)
-             ? oot_live_dlss.get()
-@@ -2213,7 +2247,7 @@ void RasterizerVulkan::DispatchCompute() {
-             TextureCacheRuntime::CopyByteAddressedShadow(cmdbuf, *byte_addressed_shadow, true);
-         }
-     });
--    if (can_replace) {
-+    if (can_replace || marking_effects) {
-         // The deferred native binding may follow DLSS's command buffer bindings.
-         scheduler.InvalidateState();
-     }
-@@ -2599,7 +2633,16 @@ void RasterizerVulkan::SignalReference() {
+@@ -2616,7 +2616,16 @@ void RasterizerVulkan::SignalReference() {
  }
  
  void RasterizerVulkan::ReleaseFences(bool force) {
@@ -3105,20 +2730,6 @@ index 23c753049b..d7bf38553b 100644
  }
  
  void RasterizerVulkan::FlushQueryResults(DAddr addr, u64 size) {
-diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.h b/src/video_core/renderer_vulkan/vk_rasterizer.h
-index afc34cbfbf..ca627a3cd2 100644
---- a/src/video_core/renderer_vulkan/vk_rasterizer.h
-+++ b/src/video_core/renderer_vulkan/vk_rasterizer.h
-@@ -311,6 +311,9 @@ private:
-     std::optional<u64> oot_dlss_frame;
-     std::optional<u64> oot_4k_scene_frame;
-     VkImage oot_4k_guest_present{};
-+    std::optional<u64> oot_effects_frame;
-+    GPUVAddr oot_effects_address{};
-+    VkImageView oot_effects_scene{};
-     struct OcarinaActorPose {
-         u64 frame{};
-         const Tegra::MemoryManager* channel{};
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
 index 7c3241dcf7..270f9888b7 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
@@ -3197,19 +2808,10 @@ index 1000aed081..c41d074460 100644
          ++buffer_index;
          buffer.SetObjectNameEXT(fmt::format("Staging Buffer {}", buffer_index).c_str());
 diff --git a/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp b/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp
-index 79101754f7..d7afa6dae4 100644
+index 79101754f7..5504f3ae9c 100644
 --- a/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp
 +++ b/src/video_core/renderer_vulkan/vk_streamline_dlss.cpp
-@@ -7,6 +7,8 @@
- #include <cstdlib>
- #include <string_view>
- 
-+#include <boost/container/static_vector.hpp>
-+
- #include "common/logging.h"
- #include "video_core/dlss_evaluation.h"
- #include "video_core/renderer_vulkan/vk_scheduler.h"
-@@ -49,13 +51,13 @@ sl::DLSSMode ModeFor(VkExtent2D render, VkExtent2D upscale) {
+@@ -49,13 +49,13 @@ sl::DLSSMode ModeFor(VkExtent2D render, VkExtent2D upscale) {
  }
  
  // Preset K for every mode: NVIDIA's defaults for Performance/Ultra Performance (M, L) draw thin
@@ -3228,7 +2830,7 @@ index 79101754f7..d7afa6dae4 100644
      }
      if (value && std::string_view{value} == "default") {
          return sl::DLSSPreset::eDefault;
-@@ -120,6 +122,7 @@ StreamlineDlssUpscaler::StreamlineDlssUpscaler(const Device& device_, Scheduler&
+@@ -120,6 +120,7 @@ StreamlineDlssUpscaler::StreamlineDlssUpscaler(const Device& device_, Scheduler&
                    static_cast<int>(result));
          throw vk::Exception(VK_ERROR_FEATURE_NOT_PRESENT);
      }
@@ -3236,64 +2838,7 @@ index 79101754f7..d7afa6dae4 100644
      point_sampler = device.GetLogical().CreateSampler(VkSamplerCreateInfo{
          .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
          .pNext = nullptr,
-@@ -301,7 +304,7 @@ bool StreamlineDlssUpscaler::Upscale(const Inputs& in) {
-             VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-         // The inputs come from the game's draws and dispatches and stay in GENERAL otherwise;
-         // DLSS reads them as sampled images.
--        const std::array to_read{
-+        boost::container::static_vector<VkImageMemoryBarrier, 4> to_read{
-             Barrier(in.color, WRITES, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL,
-                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
-             Barrier(in.depth, WRITES, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL,
-@@ -361,9 +364,9 @@ bool StreamlineDlssUpscaler::Upscale(const Inputs& in) {
-                                    sl::ResourceLifecycle::eValidUntilEvaluate, &render_area};
-         sl::ResourceTag output_tag{&output, sl::kBufferTypeScalingOutputColor,
-                                    sl::ResourceLifecycle::eValidUntilEvaluate, &output_area};
--        const sl::BaseStructure* inputs[] = {&viewport, &color_tag, &depth_tag, &motion_tag,
--                                             &output_tag};
--        const std::array to_general{
-+        boost::container::static_vector<const sl::BaseStructure*, 6> inputs{
-+            &viewport, &color_tag, &depth_tag, &motion_tag, &output_tag};
-+        boost::container::static_vector<VkImageMemoryBarrier, 4> to_general{
-             Barrier(in.color, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT | WRITES,
-                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL),
-             Barrier(in.depth, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT | WRITES,
-@@ -371,6 +374,24 @@ bool StreamlineDlssUpscaler::Upscale(const Inputs& in) {
-             Barrier(in.motion_vectors, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_SHADER_READ_BIT | WRITES,
-                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL),
-         };
-+        std::optional<sl::Resource> bias;
-+        std::optional<sl::ResourceTag> bias_tag;
-+        if (in.bias_current_color) {
-+            const auto& image = *in.bias_current_color;
-+            bias = Resource(image.image, image.view, image.format,
-+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, in.render_size,
-+                            VK_IMAGE_USAGE_SAMPLED_BIT);
-+            bias_tag.emplace(&*bias, sl::kBufferTypeBiasCurrentColorHint,
-+                             sl::ResourceLifecycle::eValidUntilEvaluate, &render_area);
-+            inputs.push_back(&*bias_tag);
-+            to_read.push_back(Barrier(image, WRITES, VK_ACCESS_SHADER_READ_BIT,
-+                                      VK_IMAGE_LAYOUT_GENERAL,
-+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
-+            to_general.push_back(Barrier(image, VK_ACCESS_SHADER_READ_BIT,
-+                                         VK_ACCESS_SHADER_READ_BIT | WRITES,
-+                                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-+                                         VK_IMAGE_LAYOUT_GENERAL));
-+        }
-         const VkMemoryBarrier output_written{
-             .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-             .pNext = nullptr,
-@@ -400,7 +421,8 @@ bool StreamlineDlssUpscaler::Upscale(const Inputs& in) {
-                 return api_result == sl::Result::eOk;
-             },
-             [&] {
--                api_result = api.evaluate_feature(sl::kFeatureDLSS, *frame, inputs, std::size(inputs),
-+                api_result = api.evaluate_feature(sl::kFeatureDLSS, *frame, inputs.data(),
-+                                                  static_cast<u32>(inputs.size()),
-                                                   reinterpret_cast<sl::CommandBuffer*>(*cmdbuf));
-                 return api_result == sl::Result::eOk;
-             },
-@@ -416,6 +438,16 @@ bool StreamlineDlssUpscaler::Upscale(const Inputs& in) {
+@@ -416,6 +417,16 @@ bool StreamlineDlssUpscaler::Upscale(const Inputs& in) {
          }
          if (result != VideoCommon::DlssEvaluationResult::Succeeded) {
              clear_output();
@@ -3311,27 +2856,10 @@ index 79101754f7..d7afa6dae4 100644
      });
      // DLSS binds its own pipelines and descriptors on the command buffer.
 diff --git a/src/video_core/renderer_vulkan/vk_streamline_dlss.h b/src/video_core/renderer_vulkan/vk_streamline_dlss.h
-index 412502b169..eb76153dd9 100644
+index 412502b169..931849e42c 100644
 --- a/src/video_core/renderer_vulkan/vk_streamline_dlss.h
 +++ b/src/video_core/renderer_vulkan/vk_streamline_dlss.h
-@@ -8,6 +8,7 @@
- 
- #include <array>
- #include <atomic>
-+#include <optional>
- 
- #include "common/common_types.h"
- #include "video_core/vulkan_common/vulkan_wrapper.h"
-@@ -41,6 +42,8 @@ public:
-         bool reset;
-         bool depth_inverted = true;
-         bool hdr = true; ///< Linear HDR colour. False for tonemapped, perceptually encoded colour.
-+        /// R16F at the render size: 1 where DLSS should use this frame's colour instead of history.
-+        std::optional<Image> bias_current_color;
-     };
- 
-     /// Throws vk::Exception when Streamline has no DLSS for this device.
-@@ -74,6 +77,7 @@ private:
+@@ -74,6 +74,7 @@ private:
      Scheduler& scheduler;
      MemoryAllocator& memory_allocator;
      void* set_options{}; ///< slDLSSSetOptions
