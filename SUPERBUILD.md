@@ -1,8 +1,8 @@
 # Lichii Superbuild (unofficial)
 
-> ## ✅ v34 recommended
+> ## ✅ v35 recommended
 >
-> v34 is based on zortos `nx2` `0b83798b` (async read-back #1028) and includes #874. v32 was removed for AMD graphics issues; v31/v30/v29/v28/v24 remain fallbacks.
+> v35 is based on zortos `nx2` `0ab7736d` (shader cache v2 #1036, async read-back #1028) and includes #874. v32 was removed for AMD graphics issues; v34/v31/v30/v29/v28/v24 remain fallbacks.
 
 ## Credits
 
@@ -29,7 +29,7 @@ a stock build as fallback.
 
 - Upstream: `zortos293/Lichii`
 - Branch: `nx2`
-- Base commit: `0b83798bf6e7e2440568b7cf69646ae45d681b11` (2026-11-08).
+- Base commit: `0ab7736df9dba2b396d2c7a26bd26fbb9b7b0dc0` (2026-11-08).
   The grass/foliage fix is now upstream as #551, so the 14-commit
   `capy/oot-hyrule-grass-fix` series is no longer carried.
 - Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -210,6 +210,6 @@ See `tools/superbuild/README.md` for packaging notes.
 `superbuild`.
 
 ```bash
-git checkout 0b83798b
+git checkout 0ab7736d
 git apply patches/superbuild.patch
 ```

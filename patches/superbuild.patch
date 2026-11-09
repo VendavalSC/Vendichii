@@ -180,10 +180,10 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..72778789f9 100644
+index bc40878ce6..a4cf2241f8 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,276 @@
+@@ -1,11 +1,290 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -192,9 +192,24 @@ index bc40878ce6..72778789f9 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v34
++## v35
  
 -## [0.1.0]
++- **Big frame-rate gain kept.** #1028 async read-back plus the #874 payload-release
++  fix give OoT roughly 12 fps over builds without them (Kokiri Forest 28.2 ->
++  32.9 fps measured on 5900X + RTX 3080).
++- Based on latest zortos `nx2` `0ab7736d`: shader cache v2 becomes the Vulkan
++  pipeline cache (#1036) — fewer and shorter shader stutters, pipelines built off
++  the GPU thread, native programs from records, driver updates no longer discard
++  the cache; plus per-frame stutter-trace zones (#1039).
++- **Rare white flashes:** an optional `EDEN_NX2_FENCE_FLUSH_US=0` line is now
++  documented in `nx2_switches.txt`. It is off by default: the upstream reporter
++  did not open a PR for it and batching helps other titles. Uncomment to try it.
++- Full v34 feature set included.
++- Windows and Linux, standard and PGO; macOS arm64 `.zip` / `.dmg`.
++## v34
+ 
+-- Initial release candidate
 +- **Big frame-rate gain.** #1028 async read-back measured at Ocarina of Time
 +  Kokiri Forest 28.2 -> 32.9 fps (+17%), p90 frame time 38.0 -> 32.8 ms on a
 +  5900X + RTX 3080; combined with the #874 payload-release fix from v29, OoT
@@ -208,8 +223,7 @@ index bc40878ce6..72778789f9 100644
 +- v32 is no longer offered; it was based on an older nx2 and some AMD users
 +  reported broken graphics. v31 remains a fallback.
 +- Windows and Linux, standard and PGO; macOS arm64 `.zip` / `.dmg`.
- 
--- Initial release candidate
++
 +## v32
 +
 +- Based on zortos `nx2` `a551b808`: NX archive format support (#923), all
@@ -602,16 +616,16 @@ index 0000000000..a0496b95b6
 +expose the port to a network. Dumps and captures can contain game assets; keep
 +them local and do not upload `.rdc` captures or dumps publicly.
 diff --git a/README.md b/README.md
-index 0caad38d8b..9bd666e786 100644
+index 0caad38d8b..a1aca03250 100644
 --- a/README.md
 +++ b/README.md
 @@ -12,6 +12,16 @@
  
  # Lichii
  
-+> ## ✅ v34 recommended
++> ## ✅ v35 recommended
 +>
-+> v34 includes the #874 payload-release fix, based on zortos `nx2` `0b83798b` with async read-back #1028. v32 was removed for AMD graphics issues; v31, v30, v29, v28 and v24 remain available as fallbacks.
++> v35 includes the #874 payload-release fix, based on zortos `nx2` `0ab7736d` with shader cache v2 and async read-back. v32 was removed for AMD graphics issues; v34, v31, v30, v29, v28 and v24 remain available as fallbacks.
 +
 +> **Unofficial superbuild fork.** This repository is not official Lichii and is
 +> not affiliated with zortos293. It carries a curated set of performance and
@@ -624,15 +638,15 @@ index 0caad38d8b..9bd666e786 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..ab4b5973d4
+index 0000000000..7399851f13
 --- /dev/null
 +++ b/SUPERBUILD.md
 @@ -0,0 +1,215 @@
 +# Lichii Superbuild (unofficial)
 +
-+> ## ✅ v34 recommended
++> ## ✅ v35 recommended
 +>
-+> v34 is based on zortos `nx2` `0b83798b` (async read-back #1028) and includes #874. v32 was removed for AMD graphics issues; v31/v30/v29/v28/v24 remain fallbacks.
++> v35 is based on zortos `nx2` `0ab7736d` (shader cache v2 #1036, async read-back #1028) and includes #874. v32 was removed for AMD graphics issues; v34/v31/v30/v29/v28/v24 remain fallbacks.
 +
 +## Credits
 +
@@ -659,7 +673,7 @@ index 0000000000..ab4b5973d4
 +
 +- Upstream: `zortos293/Lichii`
 +- Branch: `nx2`
-+- Base commit: `0b83798bf6e7e2440568b7cf69646ae45d681b11` (2026-11-08).
++- Base commit: `0ab7736df9dba2b396d2c7a26bd26fbb9b7b0dc0` (2026-11-08).
 +  The grass/foliage fix is now upstream as #551, so the 14-commit
 +  `capy/oot-hyrule-grass-fix` series is no longer carried.
 +- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -840,19 +854,26 @@ index 0000000000..ab4b5973d4
 +`superbuild`.
 +
 +```bash
-+git checkout 0b83798b
++git checkout 0ab7736d
 +git apply patches/superbuild.patch
 +```
 diff --git a/dist/nx2_switches.txt b/dist/nx2_switches.txt
-index 095ecdede4..68267cf6bd 100644
+index 095ecdede4..baa7aed975 100644
 --- a/dist/nx2_switches.txt
 +++ b/dist/nx2_switches.txt
-@@ -43,3 +43,5 @@ EDEN_NX2_FENCE_BATCH=1
+@@ -43,3 +43,12 @@ EDEN_NX2_FENCE_BATCH=1
  #EDEN_NX2_SPLIT_SKIP=1
  #EDEN_NX2_AUTO_STUB=1
  #EDEN_NX2_KEEP_ASTC=1
 +EDEN_NX2_PRELOAD_ALL_PIPELINES=1
 +EDEN_NX2_ASYNC_DISCARD=1
++
++# Optional: rare white-screen / sky flashes in Ocarina of Time (upstream issues #607,
++# #704, #981). Uncomment to submit fences immediately instead of batching them for
++# 500 us. Measured 0 flashes vs 31 in 30 s in a fork with preflush on, and OoT Lake
++# Hylia 52.3 -> 55.4 fps. Off by default because batching gives ~10-15% fps in
++# Hyrule Warriors; the evidence has not been reproduced on nx2 defaults.
++#EDEN_NX2_FENCE_FLUSH_US=0
 diff --git a/docs/user/Graphics.md b/docs/user/Graphics.md
 index 4928eb47ff..3be40fe991 100644
 --- a/docs/user/Graphics.md
@@ -1564,10 +1585,10 @@ index 78927cd2c0..4373af1bb4 100644
             tr("Changes the output graphics API.\nVulkan is recommended."));
      INSERT(Settings, vulkan_device, tr("Device:"),
 diff --git a/src/tests/CMakeLists.txt b/src/tests/CMakeLists.txt
-index 3deadcddcc..87247e3186 100644
+index 1d01c034cb..e05984bd31 100644
 --- a/src/tests/CMakeLists.txt
 +++ b/src/tests/CMakeLists.txt
-@@ -91,6 +91,7 @@ add_executable(tests
+@@ -90,6 +90,7 @@ add_executable(tests
      video_core/nx2_semaphore_mirror.cpp
      video_core/command_writer.cpp
      video_core/split_fence_wait.cpp
@@ -1766,10 +1787,10 @@ index 0000000000..45c283667c
 +    }
 +}
 diff --git a/src/video_core/CMakeLists.txt b/src/video_core/CMakeLists.txt
-index 7d8a1f2560..94ec6ba8ee 100644
+index 411a66c9ef..d791d8d209 100644
 --- a/src/video_core/CMakeLists.txt
 +++ b/src/video_core/CMakeLists.txt
-@@ -559,7 +559,7 @@ endif()
+@@ -604,7 +604,7 @@ endif()
  # setting is on. Only Streamline's MIT-licensed headers are compiled in and nothing of NVIDIA's is
  # linked or copied: sl.interposer.dll and the DLSS plugins are loaded at run time from the user's PC.
  cmake_dependent_option(ENABLE_NVIDIA_DLSS "Enable NVIDIA DLSS through NVIDIA Streamline" ON
@@ -1779,10 +1800,10 @@ index 7d8a1f2560..94ec6ba8ee 100644
      "NVIDIA Streamline SDK directory for its headers (empty: download them)")
  if (ENABLE_NVIDIA_DLSS)
 diff --git a/src/video_core/buffer_cache/buffer_cache.h b/src/video_core/buffer_cache/buffer_cache.h
-index d550a0f41e..5351adcf54 100644
+index dcb049da8b..e4c422731b 100644
 --- a/src/video_core/buffer_cache/buffer_cache.h
 +++ b/src/video_core/buffer_cache/buffer_cache.h
-@@ -1792,7 +1792,9 @@ bool BufferCache<P>::BindGraphicsStorageBuffer(size_t stage, size_t ssbo_index,
+@@ -1793,7 +1793,9 @@ bool BufferCache<P>::BindGraphicsStorageBuffer(size_t stage, size_t ssbo_index,
          StorageBufferBinding(ssbo_addr, cbuf_index, is_written,
                               maxwell3d->GetNativeMacroEngine().native_turing ||
                                   indirect_offset != ~0U,
@@ -1793,7 +1814,7 @@ index d550a0f41e..5351adcf54 100644
      if (indirect_offset != ~0U) {
          TraceTablePointer(false, stage, ssbo_index, cbuf_index, cbuf_offset, indirect_offset, holder,
                            channel_state->storage_buffers[stage][ssbo_index]);
-@@ -2521,6 +2523,7 @@ void BufferCache<P>::BindHostGraphicsUniformBuffer(size_t stage, u32 index, u32
+@@ -2522,6 +2524,7 @@ void BufferCache<P>::BindHostGraphicsUniformBuffer(size_t stage, u32 index, u32
      // Native programs keep tables next to their code in a 64 KiB bank read with indirect offsets
      // (Splatoon Raiders: the dialogue box corners in c1). Writes to that memory can go unnoticed by
      // the memory tracker, leaving stale host contents, so upload such a bank again once per frame.
@@ -1801,7 +1822,7 @@ index d550a0f41e..5351adcf54 100644
      if (has_host_buffer && (*channel_state->uniform_buffer_sizes)[stage][index] == 0x10000 &&
          size != 0 && gpu_memory != nullptr && gpu_memory->UsesNativeTiling() &&
          (Nx2Perf::Verify() || !native_indirect_uniforms_this_frame.contains(device_addr)) &&
-@@ -4145,14 +4148,15 @@ void BufferCache<P>::TraceTablePointer(bool compute, size_t stage, size_t ssbo_i
+@@ -4150,14 +4153,15 @@ void BufferCache<P>::TraceTablePointer(bool compute, size_t stage, size_t ssbo_i
  
  template <class P>
  Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index, bool is_written,
@@ -1819,7 +1840,7 @@ index d550a0f41e..5351adcf54 100644
      const u64 next_qword = reads_size_word ? gpu_memory->Read<u64>(ssbo_addr + 8) : 0;
      const u32 alignment = runtime.GetStorageBufferAlignment();
      struct CachedBinding {
-@@ -4167,7 +4171,8 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
+@@ -4172,7 +4176,8 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
      constexpr size_t ways = 4;
      thread_local std::array<std::array<CachedBinding, ways>, 512> binding_cache{};
      const u32 flags =
@@ -1829,7 +1850,7 @@ index d550a0f41e..5351adcf54 100644
      const size_t owner = gpu_memory->GetID() + 1;
      const u64 serial = gpu_memory->MapSerial();
      auto& set = binding_cache[((gpu_addr ^ next_qword ^ flags) * 0x9E3779B97F4A7C15ULL) >> 55];
-@@ -4200,7 +4205,7 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
+@@ -4205,7 +4210,7 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
              // A native (Switch 2) compute program's pointer is bare: the word after it is another
              // parameter (a dimension, stride or texture handle), not an NVN buffer size. Taking it
              // as one bound Fortune's Weave's DLSS input features to 266 bytes and dropped the rest.
@@ -1838,7 +1859,7 @@ index d550a0f41e..5351adcf54 100644
                  return (std::min)(memory_layout_size, static_cast<u32>(8_MiB));
              }
              const u32 packed_size = static_cast<u32>(next_qword);
-@@ -4305,4 +4310,4 @@ std::pair<typename BufferCache<P>::Buffer*, u32> BufferCache<P>::GetDrawIndirect
+@@ -4310,4 +4315,4 @@ std::pair<typename BufferCache<P>::Buffer*, u32> BufferCache<P>::GetDrawIndirect
                            buffer.Offset(channel_state->indirect_buffer_binding.device_addr));
  }
  
@@ -3080,7 +3101,7 @@ index afc34cbfbf..ca627a3cd2 100644
          u64 frame{};
          const Tegra::MemoryManager* channel{};
 diff --git a/src/video_core/renderer_vulkan/vk_scheduler.cpp b/src/video_core/renderer_vulkan/vk_scheduler.cpp
-index 913d6fe44c..584598bfef 100644
+index 7c3241dcf7..270f9888b7 100644
 --- a/src/video_core/renderer_vulkan/vk_scheduler.cpp
 +++ b/src/video_core/renderer_vulkan/vk_scheduler.cpp
 @@ -192,7 +192,7 @@ bool Scheduler::DeferFlush() {
@@ -3116,18 +3137,18 @@ index b3f5708312..3bc1576419 100644
  
      std::chrono::steady_clock::duration frame_interval{};
 diff --git a/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp b/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
-index ffcf9e441b..9434e1ae39 100644
+index 1000aed081..c41d074460 100644
 --- a/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
 +++ b/src/video_core/renderer_vulkan/vk_staging_buffer_pool.cpp
-@@ -15,6 +15,7 @@
- #include "common/bit_util.h"
+@@ -16,6 +16,7 @@
  #include "common/common_types.h"
  #include "common/literals.h"
+ #include "video_core/nx2_stutter_trace.h"
 +#include "common/logging.h"
  #include "video_core/renderer_vulkan/vk_scheduler.h"
  #include "video_core/renderer_vulkan/vk_staging_buffer_pool.h"
  #include "video_core/vulkan_common/vulkan_device.h"
-@@ -243,7 +244,27 @@ StagingBufferRef StagingBufferPool::CreateStagingBuffer(size_t size, MemoryUsage
+@@ -245,7 +246,27 @@ StagingBufferRef StagingBufferPool::CreateStagingBuffer(size_t size, MemoryUsage
      if (device.IsBufferDeviceAddressSupported()) {
          buffer_ci.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
      }
@@ -3515,10 +3536,10 @@ index da57da6917..9ce8bec55d 100644
          UNIMPLEMENTED_MSG("Unimplemented format={}", format);
          return PixelFormat::A8B8G8R8_UNORM;
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 69b715ed22..e700a36a1a 100644
+index 1876102c95..b79eaef630 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
-@@ -348,6 +348,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
+@@ -349,6 +349,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
          }
      }
      expected_memory = (std::min)(expected_memory, critical_memory);
@@ -3531,7 +3552,7 @@ index 69b715ed22..e700a36a1a 100644
      if (log) {
          LogThresholds();
      }
-@@ -1691,6 +1697,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
+@@ -1693,6 +1699,10 @@ std::pair<typename P::ImageView*, bool> TextureCache<P>::TryFindFramebufferImage
              return PixelFormat::R5G6B5_UNORM;
          case Service::android::PixelFormat::Bgra8888:
              return PixelFormat::B8G8R8A8_UNORM;

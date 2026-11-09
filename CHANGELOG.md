@@ -2,6 +2,20 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v35
+
+- **Big frame-rate gain kept.** #1028 async read-back plus the #874 payload-release
+  fix give OoT roughly 12 fps over builds without them (Kokiri Forest 28.2 ->
+  32.9 fps measured on 5900X + RTX 3080).
+- Based on latest zortos `nx2` `0ab7736d`: shader cache v2 becomes the Vulkan
+  pipeline cache (#1036) — fewer and shorter shader stutters, pipelines built off
+  the GPU thread, native programs from records, driver updates no longer discard
+  the cache; plus per-frame stutter-trace zones (#1039).
+- **Rare white flashes:** an optional `EDEN_NX2_FENCE_FLUSH_US=0` line is now
+  documented in `nx2_switches.txt`. It is off by default: the upstream reporter
+  did not open a PR for it and batching helps other titles. Uncomment to try it.
+- Full v34 feature set included.
+- Windows and Linux, standard and PGO; macOS arm64 `.zip` / `.dmg`.
 ## v34
 
 - **Big frame-rate gain.** #1028 async read-back measured at Ocarina of Time
