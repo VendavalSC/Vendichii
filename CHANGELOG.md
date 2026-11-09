@@ -2,6 +2,16 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v33
+
+- Based on zortos `nx2` `0b83798b`: #1028 async read-back — the reading thread
+  waits for its downloads, measured at OoT Kokiri 28.2 -> 32.9 fps (+17%) with
+  p90 frame time 38.0 -> 32.8 ms on 5900X + RTX 3080; and #965 GPU profiling
+  diagnostics (GPU waits by zone, present/submit zones, spin-mutex contention).
+- Keeps #874 payload-release fix and the full v32 feature set, including the
+  selected safe Fritchii ports.
+- Windows and Linux, standard and PGO.
+
 ## v32
 
 - Based on zortos `nx2` `a551b808`: NX archive format support (#923), all
