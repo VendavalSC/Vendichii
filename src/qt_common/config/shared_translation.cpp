@@ -157,10 +157,25 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
               "checked, when it can't run on this GPU, with resolution scaling, and for the rest "
               "of the session if its output fails Lichii's checks.\nTakes effect when a game "
               "starts."));
+    INSERT(Settings, frame_rate_limit, tr("Frame rate limit (Switch 2):"),
+           tr("Rate of the Switch 2 VSync event that games start their frames on (default 60 Hz)."
+              "\nAbove 60 Hz most games run too fast; use it with a game patch that follows real "
+              "time, such as \"FPS Unlock (built-in)\" for Ocarina of Time.\nTakes effect when a "
+              "game starts."));
     INSERT(Settings, fsr_sharpening_slider, tr("RCAS Sharpness:"),
            tr("Strength of RCAS (AMD's contrast-adaptive sharpening) on the upscaler used in place "
               "of a game's DLSS (AMD FSR 3.1); 0% turns it off.\nAlso sets the sharpening "
               "of the AMD FSR 1 and SGSR window adapting filters."));
+    INSERT(Settings, ocarina_fsr, tr("Use AMD FSR 3.1 upscaling in Ocarina of Time"),
+           tr("Replaces Ocarina of Time's native upscaler using scene depth and camera motion. "
+              "Works on any supported Vulkan GPU. NVIDIA DLSS takes precedence when enabled and "
+              "available. RCAS Sharpness controls sharpening. Takes effect when a game starts."));
+    INSERT(Settings, amd_fsr4, tr("Use AMD FSR 4 in place of FSR 3.1"),
+           tr("Uses AMD's ML-based FSR 4 where FSR replaces a game's upscaler (Ocarina of Time "
+              "with the setting above). Radeon RX 6000 or newer, or a Ryzen AI processor, with a "
+              "current AMD driver.\nNeeds AMD's FidelityFX runtime, which Lichii downloads from "
+              "AMD when you ask. The files are AMD's, under AMD's licence. Without them, or if FSR 4 "
+              "can't run, FSR 3.1 is used. Takes effect when a game starts."));
     INSERT(Settings, nvidia_dlss, tr("Use NVIDIA DLSS in place of a game's DLSS (experimental)"),
            tr("Uses NVIDIA DLSS on GeForce RTX cards in place of a Switch 2 game's own DLSS, "
               "instead of AMD FSR 3.1.\nNeeds NVIDIA's Streamline loader, and NVIDIA DLSS unless "
@@ -266,6 +281,12 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
            tr("Controls the DMA read mode.\nUnsafe is faster, while Safe is more stable and can fix issues in some games.\nDefault follows the GPU Accuracy setting."));
     INSERT(Settings, gpu_fence_behavior, tr("GPU Fence Behavior:"),
            tr("Controls the GPU fence synchronization behavior.\nImmediate is the fastest option, but can introduce some issues.\nBalanced offers better compatibility and may fix issues in some games.\nAccurate further improves compatibility at the cost of some performance.\nDefault follows the GPU Mode setting."));
+    INSERT(Settings, native_compute_write_mark, tr("Native compute write mark:"),
+           tr("How much of a Switch 2 compute shader's storage buffer is treated as written by "
+              "the GPU after each dispatch.\nAuto marks what the shader's stores can reach and "
+              "falls back to Full when that cannot be proven.\nFull marks the whole binding (up to "
+              "8 MiB), the original behaviour: it can delay the game's own writes to nearby memory "
+              "(flickering effects) and copy far more data back from the GPU."));
     INSERT(Settings, use_asynchronous_shaders, tr("Enable asynchronous shader compilation"),
            tr("May reduce shader stutter."));
     INSERT(Settings, gpu_clock, tr("GPU Clocks"),
@@ -287,7 +308,7 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
            tr("Determines the number of depth slices processed in a single dispatch.\n"
               "Increasing this can improve throughput on high-end GPUs but may cause TDR or driver "
               "timeouts on weaker hardware."));
-    INSERT(Settings, pin_gpu_threads, tr("Pin GPU threads to their own cores (experimental)"),
+    INSERT(Settings, pin_gpu_threads, tr("Pin GPU threads to their own cores"),
            tr("Pins the emulator's GPU threads to dedicated physical CPU cores and keeps the "
               "emulated CPU cores off them.\n"
               "Can hurt performance on CPUs with few cores. Skipped on CPUs with fewer than 6 "
@@ -298,6 +319,14 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
            tr("Enables GPU vendor-specific pipeline cache.\nThis option can improve shader loading "
               "time significantly in cases where the Vulkan driver does not store pipeline cache "
               "files internally."));
+    INSERT(Settings, precache_shaders, tr("Precache shaders before game start:"),
+           tr("Builds shaders on the loading screen, on every CPU thread, so they don't stutter "
+              "the first time the game uses them: the compute shaders found in the game files, "
+              "and the shaders saved by earlier play sessions that the normal shader loading "
+              "leaves for later. The first launch reads the game files and takes a few minutes; "
+              "later launches only build what is new, until the GPU driver changes. The loading "
+              "screen has a Skip button.\nAsk asks at launch while the game has never been "
+              "precached."));
     INSERT(Settings, native_async_draws, tr("Switch 2 draws with unbuilt pipelines:"),
            tr("Only applies when asynchronous shader building is on. Decides what a Switch 2 draw "
               "does when its graphics pipeline is still building.\n"
@@ -488,6 +517,11 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
                               PAIR(DmaAccuracy, Default, tr("Default")),
                               PAIR(DmaAccuracy, Unsafe, tr("Unsafe (fast)")),
                               PAIR(DmaAccuracy, Safe, tr("Safe (stable)")),
+                          }});
+    translations->insert({Settings::EnumMetadata<Settings::NativeComputeWriteMark>::Index(),
+                          {
+                              PAIR(NativeComputeWriteMark, Auto, tr("Auto (shader extent)")),
+                              PAIR(NativeComputeWriteMark, Full, tr("Full binding")),
                           }});
     translations->insert({Settings::EnumMetadata<Settings::GpuFenceBehavior>::Index(),
                           {
@@ -698,6 +732,12 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
                           {
                               PAIR(ConsoleMode, Docked, tr("Docked")),
                               PAIR(ConsoleMode, Handheld, tr("Handheld")),
+                          }});
+    translations->insert({Settings::EnumMetadata<Settings::PrecacheShaders>::Index(),
+                          {
+                              PAIR(PrecacheShaders, Off, tr("Off")),
+                              PAIR(PrecacheShaders, Ask, tr("Ask")),
+                              PAIR(PrecacheShaders, Always, tr("Always")),
                           }});
     translations->insert({Settings::EnumMetadata<Settings::NativeAsyncDraws>::Index(),
                           {

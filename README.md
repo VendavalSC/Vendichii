@@ -24,7 +24,7 @@ Vendichii usa las mismas carpetas de datos que Lichii/Eden (`%APPDATA%\eden`), a
 
 ## Qué tiene
 
-Encima de Lichii (build 117):
+Encima de Lichii (build 130):
 
 - **Generación de fotogramas AMD FSR 3**: la interpolación y el flujo óptico oficiales de AMD (FidelityFX SDK v1.1.4, shaders sin modificar), sin Lossless Scaling ni nada externo. Se activa en *Configurar > Gráficos > Frame generation > AMD FSR 3 Frame Generation*. La barra de estado muestra `Display: X FPS` con los fotogramas generados.
 - **PGO propio**: compilado con clang, ThinLTO y un perfil grabado jugando a Ocarina. En la ciudadela de Hyrule pasó de 35 a 45-50 fps.
