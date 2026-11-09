@@ -90,7 +90,7 @@ std::vector<u8> ReadFile(const std::filesystem::path& path) {
 
 template <typename T>
 T Load(std::span<const u8> bytes, size_t offset) {
-    if (offset + sizeof(T) > bytes.size())
+    if (offset > bytes.size() || sizeof(T) > bytes.size() - offset)
         throw std::runtime_error("Truncated input");
     T value;
     std::memcpy(&value, bytes.data() + offset, sizeof(T));
@@ -534,7 +534,7 @@ struct RecordedEnvironment final : public Shader::Environment {
         viewport = Load<u32>(bytes, offset + 68);
         stage = static_cast<Stage>(Load<u32>(bytes, offset + 72));
         offset += 76;
-        if (code_size % 8 || offset + code_size > bytes.size())
+        if (code_size % 8 || offset > bytes.size() || code_size > bytes.size() - offset)
             throw std::runtime_error("Invalid recorded code size");
         code.resize(code_size / 8);
         std::memcpy(code.data(), bytes.data() + offset, code_size);

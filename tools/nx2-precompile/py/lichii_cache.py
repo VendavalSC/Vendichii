@@ -420,7 +420,7 @@ def parse_cache(data: bytes, mesh_fields: bool | None = None,
                 raise CacheError(f"truncated num_envs at {cur}")
             num = struct.unpack_from("<I", mv, cur)[0]
             cur += 4
-            if not 1 <= num <= 5:
+            if not 1 <= num <= 6:  # six with both vertex programs
                 raise CacheError(f"record {idx}: bad num_envs {num} at {begin}")
             envs = []
             for _ in range(num):
@@ -498,6 +498,8 @@ def check_loadable(rec: Record, machine: dict = THIS_MACHINE) -> list[str]:
     p = []
     if not rec.envs:
         return ["num_envs == 0 (envs.front() is UB in LoadPipelines)"]
+    if any(e.stage in (STAGE_TASK, STAGE_MESH) and e.mesh_registers is None for e in rec.envs):
+        return ["task or mesh environment without mesh fields (a cache older than v53)"]
     if rec.is_compute:
         if len(rec.envs) != 1:
             p.append("compute record with more than one env (extra envs silently ignored)")

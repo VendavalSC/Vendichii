@@ -1977,7 +1977,6 @@ void PipelineCache::PreparePrecompiled(const std::filesystem::path& base_dir,
         }
         env_index.resize(env_count);
         file.read(reinterpret_cast<char*>(env_index.data()), env_count * sizeof(env_index[0]));
-        records.reserve(record_count);
         for (u32 i = 0; i < record_count; ++i) {
             u8 kind{}, count{};
             u16 pad{};
@@ -2087,6 +2086,13 @@ void PipelineCache::PreparePrecompiled(const std::filesystem::path& base_dir,
         ++state.skipped;
         complete(index);
     };
+    // A job a stop cancelled before it built: its slot is freed, but it is not done, so the
+    // checkpoint stays before it and the next boot builds it.
+    const auto abandon = [&] {
+        std::scoped_lock lock{state.mutex};
+        --state.in_flight;
+        state.cv.notify_all();
+    };
     const auto read_envs = [&path, &env_index](const std::vector<u32>& ids) {
         std::ifstream file(path, std::ios::binary);
         file.exceptions(std::ifstream::failbit);
@@ -2143,10 +2149,10 @@ void PipelineCache::PreparePrecompiled(const std::filesystem::path& base_dir,
             {.priority = VideoCommon::ShaderJobPriority::Soon,
              .cpu_bytes = TranslationBytes(env_bytes),
              .driver_bytes = DriverCompileBytes,
-             .cpu = [this, index, &record, &read_envs,
-                     &finish](VideoCommon::ShaderJobContext& context) -> VideoCommon::ShaderDriverStage {
+             .cpu = [this, index, &record, &read_envs, &finish,
+                     &abandon](VideoCommon::ShaderJobContext& context) -> VideoCommon::ShaderDriverStage {
                  if (context.StopRequested()) {
-                     finish(index, false);
+                     abandon();
                      return {};
                  }
                  Common::UniqueFunction<bool> build;

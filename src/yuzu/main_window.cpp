@@ -3040,6 +3040,15 @@ void MainWindow::OnGameListPrepareShadersFromRecipe(u64 program_id, const std::s
                                      fmt::format("{:016X}", header->title_id))));
         return;
     }
+    if (header->cache_version != VideoCommon::VulkanPipelineCacheVersion) {
+        QMessageBox::warning(this, title,
+                             tr("This recipe was made for shader cache version %1, and this build "
+                                "of Lichii uses version %2. A recipe made for this version is "
+                                "needed.")
+                                 .arg(header->cache_version)
+                                 .arg(VideoCommon::VulkanPipelineCacheVersion));
+        return;
+    }
 
     // The game's RomFS as it loads it: a NUP's update laid over its base (loader/nup.cpp), or what
     // the game's loader reads.
