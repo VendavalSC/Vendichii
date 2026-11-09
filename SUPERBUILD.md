@@ -1,8 +1,8 @@
 # Lichii Superbuild (unofficial)
 
-> ## ✅ v31 recommended
+> ## ✅ v32 recommended
 >
-> v31 is based on zortos `nx2` `cbb512ee`, includes #874, #910/#921 and #932, and is the current recommended release. v30/v29/v28/v24 remain fallbacks.
+> v32 is based on zortos `nx2` `a551b808`, includes #874 and selected safe Fritchii fixes, and is the current recommended release. v31/v30/v29/v28/v24 remain fallbacks.
 
 ## Credits
 
@@ -29,7 +29,7 @@ a stock build as fallback.
 
 - Upstream: `zortos293/Lichii`
 - Branch: `nx2`
-- Base commit: `cbb512ee7a9de9d9dbe2f865ec2e468888503214` (2026-11-08).
+- Base commit: `a551b80888dacfc71bbdc2b2d0b81702d656c04e` (2026-11-08).
   The grass/foliage fix is now upstream as #551, so the 14-commit
   `capy/oot-hyrule-grass-fix` series is no longer carried.
 - Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -210,6 +210,6 @@ See `tools/superbuild/README.md` for packaging notes.
 `superbuild`.
 
 ```bash
-git checkout cbb512ee
+git checkout a551b808
 git apply patches/superbuild.patch
 ```

@@ -2,6 +2,25 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v32
+
+- Based on zortos `nx2` `a551b808`: NX archive format support (#923), all
+  semaphore regions kept instead of only the first 32 (#1014), HostTiming OS
+  sleeps between events (#1016), drain-free semaphore acquires and descriptor
+  replay (#949), Switch 2 semaphore mirror with direct-release shadowing (#979),
+  all-zero guest page trimming (#961), per-device translation generations (#984),
+  malformed-file parser hardening (#947), and memory/stutter trace tools.
+- Keeps #874: fence-flagged payload releases stay synchronized at low accuracy /
+  Default fences, restoring OoT performance after #337.
+- Adds selected safe Fritchii fixes: bounds-checked ASTC decode and unswizzle
+  stores (AMD corruption / device loss), host-memory buffers may exceed the
+  memory budget instead of aborting (OoT town-square crash after long sessions),
+  Windows high-resolution waitable timer for the guest clock, and updater
+  download retries on 5xx/429/dropped connections.
+- MinGW build fix for `PROCESS_MEMORY_COUNTERS_EX2`.
+- Full v31 feature set included.
+- Windows and Linux, standard and PGO.
+
 ## v31
 
 - Based on zortos `nx2` `cbb512ee`: #932 fixes the macOS build type mismatch in

@@ -17,9 +17,9 @@
 
 # Lichii
 
-> ## ✅ v31 recommended
+> ## ✅ v32 recommended
 >
-> v31 includes the #874 payload-release fix and the #910/#921/#932 fixes, based on zortos `nx2` `cbb512ee`. v30, v29, v28 and v24 remain available as fallbacks.
+> v32 includes the #874 payload-release fix and selected safe Fritchii fixes, based on zortos `nx2` `a551b808`. v31, v30, v29, v28 and v24 remain available as fallbacks.
 
 > **Unofficial superbuild fork.** This repository is not official Lichii and is
 > not affiliated with zortos293. It carries a curated set of performance and
