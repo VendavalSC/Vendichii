@@ -475,6 +475,10 @@ public:
             put(shared_memory);
         } else {
             put(sph);
+            // As GenericEnvironment::Serialize writes them (the mask is unknown offline: 0)
+            if (stage == Stage::Geometry) {
+                put(gp_passthrough_mask);
+            }
             if (stage == Stage::Task || stage == Stage::Mesh) {
                 put(mesh_registers);
                 put(mesh_primitive_header);
@@ -534,7 +538,8 @@ struct RecordedEnvironment final : public Shader::Environment {
         viewport = Load<u32>(bytes, offset + 68);
         stage = static_cast<Stage>(Load<u32>(bytes, offset + 72));
         offset += 76;
-        if (code_size % 8 || offset > bytes.size() || code_size > bytes.size() - offset)
+        if (code_size == 0 || code_size % 8 || offset > bytes.size() ||
+            code_size > bytes.size() - offset)
             throw std::runtime_error("Invalid recorded code size");
         code.resize(code_size / 8);
         std::memcpy(code.data(), bytes.data() + offset, code_size);

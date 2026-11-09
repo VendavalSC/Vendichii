@@ -387,9 +387,13 @@ def parse_env(mv: memoryview, cur: int, n: int, mesh_fields: bool) -> Env:
         env.sph = bytes(mv[cur:cur + SPH_SIZE])
         cur += SPH_SIZE
         if stage == STAGE_GEOMETRY:
+            if cur + 32 > n:
+                raise CacheError(f"truncated geometry passthrough mask at {cur}")
             env.gp_passthrough_mask = struct.unpack_from("<8I", mv, cur)
             cur += 32
         if mesh_fields and stage in (STAGE_TASK, STAGE_MESH):
+            if cur + 12 + SPH_SIZE > n:
+                raise CacheError(f"truncated mesh fields at {cur}")
             env.mesh_registers = struct.unpack_from("<3I", mv, cur)
             cur += 12
             env.mesh_primitive_header = bytes(mv[cur:cur + SPH_SIZE])
@@ -542,12 +546,14 @@ def check_loadable(rec: Record, machine: dict = THIS_MACHINE) -> list[str]:
     return p
 
 
-def merge_caches(base: bytes, extra: bytes, version: int = 53, extra_mesh_fields: bool | None = None,
+def merge_caches(base: bytes, extra: bytes, version: int | None = None, extra_mesh_fields: bool | None = None,
                  machine: dict = THIS_MACHINE):
     """Return (merged_bytes, added_graphics_key_hashes, report). Base records are kept verbatim and first
     (Lichii keeps the first record per graphics key hash); extra records whose key hash is new and that pass
     check_loadable are appended re-serialized in the v53 layout. Never writes files."""
     bver, bit = parse_cache(base)
+    if version is None:
+        version = bver  # the base's own version unless another is asked for
     # Base records are copied as they are: their layout must be the one the header will name
     # (task and mesh environments gained fields in v53).
     if (bver >= 53) != (version >= 53):
