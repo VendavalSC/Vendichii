@@ -2,6 +2,21 @@
 
 All releases are unofficial builds. See the GitHub releases for assets and checksums.
 
+## v37
+
+- Based on latest zortos `nx2` `7afad5494e`, three safe merged changes on top of
+  v36: **OoT FSR jitter and texture LOD bias (#1061)** — sub-pixel camera jitter
+  so FSR gets real sub-pixel detail instead of sampling the same position every
+  frame, which removes stair-stepping and shimmer on thin geometry; **texture
+  cache join uploads skipped when layer copies overwrite the whole target
+  (#1079)**; and **OoT AMD FSR 4 (#1062)** through AMD's official FidelityFX
+  runtime, loaded at run time and falling back to FSR 3.1 when it is not there.
+- Full v36 feature set stays in: #1056 macros on the split's back (the big OoT
+  gain), #1060 OoT FSR 3.1, shader cache v2 #1036, async read-back #1028, #874,
+  native HDR, DLSS presets E/F, the safe Fritchii ports and the optional
+  `EDEN_NX2_FENCE_FLUSH_US=0` white-flash mitigation.
+- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
+
 ## v36
 
 - **Big frame-rate gain.** #1056 runs the macros that read memory on the split's

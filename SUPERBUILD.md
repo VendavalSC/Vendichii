@@ -1,8 +1,8 @@
 # Lichii Superbuild (unofficial)
 
-> ## ✅ v36 recommended
+> ## ✅ v37 recommended
 >
-> v36 is based on zortos `nx2` `c215653cc5` (#1056 back macros, #1060 OoT FSR 3.1, shader cache v2 #1036, async read-back #1028) and includes #874. v32 was removed for AMD graphics issues; v35/v34/v31/v30/v29/v28/v24 remain fallbacks.
+> v37 is based on zortos `nx2` `7afad5494e` (#1061 FSR jitter, #1079 texture-cache joins, #1062 FSR 4, plus v36's #1056 back macros, #1060 FSR 3.1, #1036 shader cache v2 and #1028 async read-back) and includes #874. v32 was removed for AMD graphics issues; v36/v35/v34/v31/v30/v29/v28/v24 remain fallbacks.
 
 ## Credits
 
@@ -29,7 +29,7 @@ a stock build as fallback.
 
 - Upstream: `zortos293/Lichii`
 - Branch: `nx2`
-- Base commit: `c215653cc542ae4c680dff3f75ff3e8000c77716` (2026-11-08).
+- Base commit: `7afad5494e650edfc169624be54e606f54b079ec` (2026-11-08).
   The grass/foliage fix is now upstream as #551, so the 14-commit
   `capy/oot-hyrule-grass-fix` series is no longer carried.
 - Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,

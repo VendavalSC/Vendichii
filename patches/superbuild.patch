@@ -180,10 +180,10 @@ index 873b99bec2..67960c7f41 100644
 +dist-local/
 +tools/superbuild/local/
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index bc40878ce6..7d7b3569a7 100644
+index bc40878ce6..498e2b0976 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -1,11 +1,311 @@
+@@ -1,11 +1,326 @@
  # Changelog
  
 -All notable changes to Eglantine are documented here. Each release's notes are taken from its
@@ -192,9 +192,25 @@ index bc40878ce6..7d7b3569a7 100644
 +All releases are unofficial builds. See the GitHub releases for assets and checksums.
  
 -## [Unreleased]
-+## v36
++## v37
  
 -## [0.1.0]
++- Based on latest zortos `nx2` `7afad5494e`, three safe merged changes on top of
++  v36: **OoT FSR jitter and texture LOD bias (#1061)** — sub-pixel camera jitter
++  so FSR gets real sub-pixel detail instead of sampling the same position every
++  frame, which removes stair-stepping and shimmer on thin geometry; **texture
++  cache join uploads skipped when layer copies overwrite the whole target
++  (#1079)**; and **OoT AMD FSR 4 (#1062)** through AMD's official FidelityFX
++  runtime, loaded at run time and falling back to FSR 3.1 when it is not there.
++- Full v36 feature set stays in: #1056 macros on the split's back (the big OoT
++  gain), #1060 OoT FSR 3.1, shader cache v2 #1036, async read-back #1028, #874,
++  native HDR, DLSS presets E/F, the safe Fritchii ports and the optional
++  `EDEN_NX2_FENCE_FLUSH_US=0` white-flash mitigation.
++- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
+ 
+-- Initial release candidate
++## v36
++
 +- **Big frame-rate gain.** #1056 runs the macros that read memory on the split's
 +  back: Ocarina of Time's render-enable macro makes ~25,000 MME DMA reads a
 +  second in Hyrule Field, and each waited on the split's front — 252.8 ms of
@@ -213,8 +229,7 @@ index bc40878ce6..7d7b3569a7 100644
 +- Full v35 feature set included, including #874, native HDR, the DLSS presets
 +  E/F and the optional `EDEN_NX2_FENCE_FLUSH_US=0` white-flash mitigation.
 +- Windows and Linux, standard and PGO. macOS arm64 builds remain on v34.
- 
--- Initial release candidate
++
 +## v35
 +
 +- **Big frame-rate gain kept.** #1028 async read-back plus the #874 payload-release
@@ -637,16 +652,16 @@ index 0000000000..a0496b95b6
 +expose the port to a network. Dumps and captures can contain game assets; keep
 +them local and do not upload `.rdc` captures or dumps publicly.
 diff --git a/README.md b/README.md
-index 9230cf33b0..0d02ff32a0 100644
+index 9230cf33b0..632b71143f 100644
 --- a/README.md
 +++ b/README.md
 @@ -17,6 +17,16 @@
  
  # Lichii
  
-+> ## ✅ v36 recommended
++> ## ✅ v37 recommended
 +>
-+> v36 includes the #874 payload-release fix, based on zortos `nx2` `c215653cc5` with the back-macro speedup, OoT FSR 3.1, shader cache v2 and async read-back. v32 was removed for AMD graphics issues; v35, v34, v31, v30, v29, v28 and v24 remain available as fallbacks.
++> v37 includes the #874 payload-release fix, based on zortos `nx2` `7afad5494e` with OoT FSR jitter and FSR 4, the texture-cache join skip, and v36's back-macro speedup and OoT FSR 3.1. v32 was removed for AMD graphics issues; v36, v35, v34, v31, v30, v29, v28 and v24 remain available as fallbacks.
 +
 +> **Unofficial superbuild fork.** This repository is not official Lichii and is
 +> not affiliated with zortos293. It carries a curated set of performance and
@@ -659,15 +674,15 @@ index 9230cf33b0..0d02ff32a0 100644
  This is an independent fork, not an official release of those upstream projects. Lichii is not affiliated with Nintendo.
 diff --git a/SUPERBUILD.md b/SUPERBUILD.md
 new file mode 100644
-index 0000000000..9e5e4bdcb4
+index 0000000000..760d7fa8b0
 --- /dev/null
 +++ b/SUPERBUILD.md
 @@ -0,0 +1,215 @@
 +# Lichii Superbuild (unofficial)
 +
-+> ## ✅ v36 recommended
++> ## ✅ v37 recommended
 +>
-+> v36 is based on zortos `nx2` `c215653cc5` (#1056 back macros, #1060 OoT FSR 3.1, shader cache v2 #1036, async read-back #1028) and includes #874. v32 was removed for AMD graphics issues; v35/v34/v31/v30/v29/v28/v24 remain fallbacks.
++> v37 is based on zortos `nx2` `7afad5494e` (#1061 FSR jitter, #1079 texture-cache joins, #1062 FSR 4, plus v36's #1056 back macros, #1060 FSR 3.1, #1036 shader cache v2 and #1028 async read-back) and includes #874. v32 was removed for AMD graphics issues; v36/v35/v34/v31/v30/v29/v28/v24 remain fallbacks.
 +
 +## Credits
 +
@@ -694,7 +709,7 @@ index 0000000000..9e5e4bdcb4
 +
 +- Upstream: `zortos293/Lichii`
 +- Branch: `nx2`
-+- Base commit: `c215653cc542ae4c680dff3f75ff3e8000c77716` (2026-11-08).
++- Base commit: `7afad5494e650edfc169624be54e606f54b079ec` (2026-11-08).
 +  The grass/foliage fix is now upstream as #551, so the 14-commit
 +  `capy/oot-hyrule-grass-fix` series is no longer carried.
 +- Upstream `nx2` already contains #303, #287, #314, #224, #273, #284, #290,
@@ -1052,7 +1067,7 @@ index 140225da07..cc24eacf2f 100644
      }
      return {};
 diff --git a/src/common/settings.h b/src/common/settings.h
-index aa31b067da..359bd05df9 100644
+index 6879578b1b..ec001dd0a9 100644
 --- a/src/common/settings.h
 +++ b/src/common/settings.h
 @@ -339,6 +339,11 @@ struct Values {
@@ -1578,7 +1593,7 @@ index 94ee0b33a6..c0a57a100a 100644
      }
      return number;
 diff --git a/src/qt_common/config/shared_translation.cpp b/src/qt_common/config/shared_translation.cpp
-index 1138c9dbae..98c12bffbd 100644
+index 1ea3e70180..e62557d76c 100644
 --- a/src/qt_common/config/shared_translation.cpp
 +++ b/src/qt_common/config/shared_translation.cpp
 @@ -142,6 +142,23 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
@@ -1606,7 +1621,7 @@ index 1138c9dbae..98c12bffbd 100644
             tr("Changes the output graphics API.\nVulkan is recommended."));
      INSERT(Settings, vulkan_device, tr("Device:"),
 diff --git a/src/tests/CMakeLists.txt b/src/tests/CMakeLists.txt
-index 1e97cc9eb2..b63e8f1581 100644
+index 1ba28c25f8..e0040fb456 100644
 --- a/src/tests/CMakeLists.txt
 +++ b/src/tests/CMakeLists.txt
 @@ -90,6 +90,7 @@ add_executable(tests
@@ -1808,10 +1823,10 @@ index 0000000000..45c283667c
 +    }
 +}
 diff --git a/src/video_core/CMakeLists.txt b/src/video_core/CMakeLists.txt
-index 411a66c9ef..d791d8d209 100644
+index 53cb647da1..1c41d93554 100644
 --- a/src/video_core/CMakeLists.txt
 +++ b/src/video_core/CMakeLists.txt
-@@ -604,7 +604,7 @@ endif()
+@@ -616,7 +616,7 @@ endif()
  # setting is on. Only Streamline's MIT-licensed headers are compiled in and nothing of NVIDIA's is
  # linked or copied: sl.interposer.dll and the DLSS plugins are loaded at run time from the user's PC.
  cmake_dependent_option(ENABLE_NVIDIA_DLSS "Enable NVIDIA DLSS through NVIDIA Streamline" ON
@@ -2710,10 +2725,10 @@ index ab2b76f10f..67d31cc3a0 100644
      bool use_present_thread;
      std::atomic<std::size_t> image_count{};
 diff --git a/src/video_core/renderer_vulkan/vk_rasterizer.cpp b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-index a3ab4052e8..5fa66f40a5 100644
+index f8aa71f0e1..9b70a1e37a 100644
 --- a/src/video_core/renderer_vulkan/vk_rasterizer.cpp
 +++ b/src/video_core/renderer_vulkan/vk_rasterizer.cpp
-@@ -2616,7 +2616,16 @@ void RasterizerVulkan::SignalReference() {
+@@ -2617,7 +2617,16 @@ void RasterizerVulkan::SignalReference() {
  }
  
  void RasterizerVulkan::ReleaseFences(bool force) {
@@ -3083,7 +3098,7 @@ index da57da6917..9ce8bec55d 100644
          UNIMPLEMENTED_MSG("Unimplemented format={}", format);
          return PixelFormat::A8B8G8R8_UNORM;
 diff --git a/src/video_core/texture_cache/texture_cache.h b/src/video_core/texture_cache/texture_cache.h
-index 1876102c95..b79eaef630 100644
+index 397616a8d0..28a066c647 100644
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
 @@ -349,6 +349,12 @@ void TextureCache<P>::ApplyThresholdOverrides(bool log) {
@@ -3156,10 +3171,10 @@ index eb129f4a43..863c621df0 100644
      vmaGetAllocationMemoryProperties(allocator, allocation, &property_flags);
  
 diff --git a/src/yuzu/configuration/configure_graphics.cpp b/src/yuzu/configuration/configure_graphics.cpp
-index 30d387fb31..d27baf4774 100644
+index e0be4c0af1..32c0b8f2b8 100644
 --- a/src/yuzu/configuration/configure_graphics.cpp
 +++ b/src/yuzu/configuration/configure_graphics.cpp
-@@ -235,7 +235,12 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
+@@ -243,7 +243,12 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
  #endif
  
          ConfigurationShared::Widget* widget = [&]() {
@@ -3173,7 +3188,7 @@ index 30d387fb31..d27baf4774 100644
                  // FSR needs a reversed slider and a 0.5 multiplier
                  return builder.BuildWidget(
                      setting, apply_funcs, ConfigurationShared::RequestType::ReverseSlider, true,
-@@ -257,6 +262,12 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
+@@ -265,6 +270,12 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
              continue;
          }
  
@@ -3186,7 +3201,7 @@ index 30d387fb31..d27baf4774 100644
          if (setting->Id() == Settings::values.renderer_backend.Id()) {
              // Add the renderer combobox now so it's at the top
              api_grid_layout->addWidget(widget);
-@@ -518,6 +529,9 @@ void ConfigureGraphics::UpdateAPILayout() {
+@@ -538,6 +549,9 @@ void ConfigureGraphics::UpdateAPILayout() {
      const auto current_backend = GetCurrentGraphicsBackend();
      const bool is_vulkan = current_backend == Settings::RendererBackend::Vulkan;
      vulkan_device_widget->setVisible(is_vulkan);
@@ -3197,10 +3212,10 @@ index 30d387fb31..d27baf4774 100644
          vulkan_device_combobox->setCurrentIndex(vulkan_device);
      }
 diff --git a/src/yuzu/configuration/configure_graphics.h b/src/yuzu/configuration/configure_graphics.h
-index 9002af437b..21429eedfd 100644
+index e78b069590..6e4bf72776 100644
 --- a/src/yuzu/configuration/configure_graphics.h
 +++ b/src/yuzu/configuration/configure_graphics.h
-@@ -107,6 +107,7 @@ private:
+@@ -108,6 +108,7 @@ private:
      QComboBox* vsync_mode_combobox;
      QPushButton* vsync_restore_global_button;
      QWidget* vulkan_device_widget;
