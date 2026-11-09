@@ -1897,7 +1897,7 @@ private:
                          "sleep_actual_wall_ms={:.3f} pace_wall_ms={:.3f} deadline_reset={}",
                          m_presents, w[12], w[12] >> 16, w[12] & 0xffff,
                          m_frame_trace.interval, m_frame_trace.refresh, m_frame_trace.forced,
-                         Settings::values.use_speed_limit.GetValue(), Settings::SpeedLimit(),
+                         Settings::SpeedLimitEnabled(), Settings::SpeedLimit(),
                          m_frame_trace.switches, m_frame_trace.switch_from,
                          m_frame_trace.switch_to,
                          m_frame_trace.last_present == std::chrono::steady_clock::time_point{}
@@ -2041,7 +2041,7 @@ private:
         // its swap interval here as well kept it at 60 fps (interval 2 of a 120 Hz event). Only an
         // explicit FPS limit still applies then.
         const bool timer_paced = Nx2VsyncRateHz() != 60;
-        const bool speed_limited = !timer_paced && Settings::values.use_speed_limit.GetValue() &&
+        const bool speed_limited = !timer_paced && Settings::SpeedLimitEnabled() &&
                                    Settings::SpeedLimit() != 0;
         if (!speed_limited && fps_limit == 0) {
             return;

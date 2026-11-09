@@ -402,6 +402,17 @@ u32 FrameGenMultiplier() {
                       MAX_FRAME_GEN_MULTIPLIER);
 }
 
+bool SpeedLimitEnabled() {
+    if (values.use_speed_limit.GetValue()) {
+        return true;
+    }
+    // Ocarina of Time's logic takes one fixed step per frame (1/60 s, or 1/30 with the 30 FPS
+    // mode), so "Unlocked" above 60 FPS ran the whole game fast, not just smoother. It stays at
+    // its speed; Turbo and Slow remain the deliberate speed changes. From Fritchii v5.6 (Frizti).
+    constexpr u64 OcarinaOfTime = 0x0400486024DEC000ULL;
+    return GetCurrentProgramID() == OcarinaOfTime;
+}
+
 size_t FrameGenGenerations() {
     // AMD's frame generation swapchain generates its frames itself: none from FrameGen.
     if (!values.frame_gen.GetValue() || values.frame_gen_type.GetValue() == FrameGenType::AmdFsr) {

@@ -1077,6 +1077,9 @@ constexpr u32 MIN_FRAME_GEN_MULTIPLIER = 2;
 constexpr u32 MAX_FRAME_GEN_MULTIPLIER = 4;
 
 [[nodiscard]] u32 FrameGenMultiplier();
+/// Whether emulation runs at the speed limit: use_speed_limit, and in Fritchii always for Ocarina
+/// of Time, whose logic speeds up with the frame rate ("Unlocked" made the game run fast).
+[[nodiscard]] bool SpeedLimitEnabled();
 
 [[nodiscard]] size_t FrameGenGenerations();
 
