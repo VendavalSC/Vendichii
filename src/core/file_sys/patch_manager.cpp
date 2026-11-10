@@ -312,7 +312,7 @@ std::vector<VirtualFile> ModPatchFiles(const VirtualDir& mod, const std::string&
     return out;
 }
 
-// Whether a mod is Dark's standalone Dynamic FPS, which Fritchii has built in: one of its patches
+// Whether a mod is Dark's standalone Dynamic FPS, which Vendichii has built in: one of its patches
 // for Ocarina's main writes into the built-in's records (the call or the routine). Such a mod is
 // left out (not applied, not listed in Add-Ons) so the built-in, which the high refresh rate mode
 // switches live, is applied in its place. Mods overlapping the other built-ins still win.
@@ -619,7 +619,7 @@ std::vector<u8> PatchManager::PatchNSO(const std::vector<u8>& nso, const std::st
         }
         if (name == "main") {
             LOG_INFO(Loader,
-                     "    - Skipping mod \"{}\": it is Dark's Dynamic FPS, which Fritchii has "
+                     "    - Skipping mod \"{}\": it is Dark's Dynamic FPS, which Vendichii has "
                      "built in",
                      mod->GetName());
         }
@@ -1228,7 +1228,7 @@ std::vector<Patch> PatchManager::GetPatches(VirtualFile update_raw) const {
             }
 
         for (const auto& mod : mod_dir->GetSubdirectories()) {
-            // Not listed: Fritchii's built-in Dynamic FPS (listed below) is used instead.
+            // Not listed: the built-in Dynamic FPS (listed below) is used instead.
             if (IsBuiltinDynamicFpsMod(title_id, mod)) {
                 continue;
             }
