@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <algorithm>
 #include <mutex>
 #include <system_error>
 
@@ -25,7 +26,14 @@
 namespace Vulkan::FfxRuntime {
 
 std::filesystem::path Folder() {
-    return Common::FS::GetEdenPath(Common::FS::EdenPath::FidelityFxDir);
+    // Vendichii's release ships AMD's signed files in "fidelityfx" next to the exe; those are used
+    // when they are all there (checked like downloaded ones: size, SHA-256, AMD's signature).
+    static const std::filesystem::path bundled = Common::FS::GetExeDirectory() / "fidelityfx";
+    std::error_code ec;
+    const bool complete = std::ranges::all_of(FILES, [&](const File& file) {
+        return std::filesystem::file_size(bundled / file.name, ec) == file.size && !ec;
+    });
+    return complete ? bundled : Common::FS::GetEdenPath(Common::FS::EdenPath::FidelityFxDir);
 }
 
 bool FilesPresent() {
