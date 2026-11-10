@@ -3109,8 +3109,14 @@ bool RasterizerVulkan::TryOcarinaUpscale(const ComputePipeline& pipeline, bool r
     auto& target = texture_cache.GetImageView(written[0]);
     using VideoCore::Surface::PixelFormat;
     const auto extent = oot_motion.extent;
-    const bool native_size = pipeline.ShaderHash() == ComputePipeline::OcarinaFullSizeShader;
-    const bool valid_extents = upscale_4k
+    const bool native_shader = pipeline.ShaderHash() == ComputePipeline::OcarinaFullSizeShader;
+    // Docked with the 4K shader but a 1080p picture (window or display smaller than 4K), the game's
+    // 1440p shader writes a target of the scene's own size: that is the native-size case.
+    const bool same_size_4k = upscale_4k && target.size.width == extent.width &&
+                              target.size.height == extent.height;
+    const bool four_k = upscale_4k && !same_size_4k;
+    const bool native_size = native_shader || same_size_4k;
+    const bool valid_extents = four_k
         ? extent.width == 2560 && extent.height == 1440 &&
             target.size.width == 2560 && target.size.height == 1440
         : native_size
@@ -3153,9 +3159,9 @@ bool RasterizerVulkan::TryOcarinaUpscale(const ComputePipeline& pipeline, bool r
     try {
         const auto target_view =
             target.StorageView(Shader::TextureType::Color2D, Shader::ImageFormat::Typeless, false);
-        const auto scene_reference = upscale_4k ? target.Handle(Shader::TextureType::Color2D)
+        const auto scene_reference = four_k ? target.Handle(Shader::TextureType::Color2D)
                                                 : VK_NULL_HANDLE;
-        if (!target_view || (upscale_4k && !scene_reference)) {
+        if (!target_view || (four_k && !scene_reference)) {
             return fail("no upscale target view");
         }
         if (!oot_live_dlss) {
@@ -3169,7 +3175,7 @@ bool RasterizerVulkan::TryOcarinaUpscale(const ComputePipeline& pipeline, bool r
         if (oot_jitter_frame == render_trace_frame) {
             jitter = oot_jitter_offset;
         }
-        const VkExtent2D output_extent = upscale_4k ? VkExtent2D{3840, 2160} : target_extent;
+        const VkExtent2D output_extent = four_k ? VkExtent2D{3840, 2160} : target_extent;
         const bool recorded = oot_live_dlss->Record(color_view, depth.DepthView(), target_view,
                                                    extent, output_extent, target_extent, oot_motion.current,
                                                    oot_motion.previous, mesh, depth.ImageHandle(),
@@ -3177,7 +3183,7 @@ bool RasterizerVulkan::TryOcarinaUpscale(const ComputePipeline& pipeline, bool r
         if (!recorded) {
             return fail("temporal upscaler declined the frame");
         }
-        if (upscale_4k) {
+        if (four_k) {
             oot_live_dlss->SaveSceneReference(scene_reference);
             oot_4k_scene_frame = render_trace_frame;
             oot_4k_guest_present = VK_NULL_HANDLE;
