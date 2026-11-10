@@ -269,9 +269,17 @@ void RendererVulkan::Composite(std::span<const Tegra::FramebufferConfig> framebu
     }
 
     scheduler.RequestOutsideRenderPassOperationContext();
-    blit_swapchain.DrawToFrame(device, rasterizer, frame, framebuffers,
-                              render_window.GetFramebufferLayout(),
+    const auto frame_layout = render_window.GetFramebufferLayout();
+    blit_swapchain.DrawToFrame(device, rasterizer, frame, framebuffers, frame_layout,
                               present_manager.SwapchainImageCount(), output_format, hdr_output);
+    // AMD frame generation: where the game picture sits in the frame. The hudless twin (HUD mask)
+    // is not ported yet, so AMD's generator sees the HUD as part of the scene.
+    frame->frame_gen_rect = VkRect2D{
+        .offset = {static_cast<s32>(frame_layout.screen.left),
+                   static_cast<s32>(frame_layout.screen.top)},
+        .extent = {frame_layout.screen.GetWidth(), frame_layout.screen.GetHeight()},
+    };
+    frame->frame_gen_hudless = VK_NULL_HANDLE;
 
 #ifdef HAS_LSFG
     if (hdr_output) {
@@ -346,7 +354,12 @@ void RendererVulkan::Report() const {
     LOG_INFO(Render_Vulkan, "Driver: {} {}", device.GetVendorName(), GetDriverVersion(device));
     LOG_INFO(Render_Vulkan, "Device: {}", device_info.model);
     LOG_INFO(Render_Vulkan, "Vulkan: {}", api_version);
-    LOG_INFO(Render_Vulkan, "Available VRAM: {:.2f} GiB", available_vram);
+    // Conservative mode caps this at 6 GiB plus 1 GiB per resolution step (7.00 at 1X): say so,
+    // or the number reads like other programs holding the rest of the card.
+    LOG_INFO(Render_Vulkan, "Available VRAM: {:.2f} GiB{}", available_vram,
+             Settings::values.vram_usage_mode.GetValue() == Settings::VramUsageMode::Aggressive
+                 ? ""
+                 : " (VRAM Usage Mode: Conservative, capped at 6 GiB + 1 GiB per resolution step)");
     if (VideoCommon::RenderTrace::Enabled()) {
         LOG_INFO(Render_Vulkan, "Render trace enabled: interval=600 frames, log_filter={}",
                  Settings::values.log_filter.GetValue());

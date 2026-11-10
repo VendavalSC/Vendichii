@@ -62,6 +62,7 @@ SWITCHABLE(Region, true);
 SWITCHABLE(RendererBackend, true);
 SWITCHABLE(ScalingFilter, false);
 SWITCHABLE(FrameGenType, false);
+SWITCHABLE(AmdFrameGenVersion, false);
 SWITCHABLE(SpirvOptimizeMode, true);
 SWITCHABLE(TimeZone, true);
 SETTING(VSyncMode, true);
@@ -402,14 +403,16 @@ u32 FrameGenMultiplier() {
 }
 
 size_t FrameGenGenerations() {
-    if (!values.frame_gen.GetValue()) {
+    // AMD's frame generation swapchain generates its frames itself: none from FrameGen.
+    if (!values.frame_gen.GetValue() || values.frame_gen_type.GetValue() == FrameGenType::AmdFsr) {
         return 0;
     }
     return FrameGenMultiplier() - 1;
 }
 
 size_t FrameGenMaxGenerations() {
-    if (!values.frame_gen.GetValue()) {
+    // AMD's frame generation swapchain generates its frames itself: none from FrameGen.
+    if (!values.frame_gen.GetValue() || values.frame_gen_type.GetValue() == FrameGenType::AmdFsr) {
         return 0;
     }
     if (values.frame_gen_target_rate.GetValue() != 0) {

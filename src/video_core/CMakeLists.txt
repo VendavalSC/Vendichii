@@ -363,6 +363,8 @@ add_library(video_core STATIC
     textures/unswizzle_worker.h
     textures/workers.cpp
     textures/workers.h
+    renderer_vulkan/vk_amd_frame_gen.cpp
+    renderer_vulkan/vk_amd_frame_gen.h
     transform_feedback.cpp
     transform_feedback.h
     video_core.cpp

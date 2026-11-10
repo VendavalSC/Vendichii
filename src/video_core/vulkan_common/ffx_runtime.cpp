@@ -176,24 +176,47 @@ std::shared_ptr<const Api> Acquire() {
         reinterpret_cast<PfnFfxCreateContext>(GetProcAddress(module, "ffxCreateContext"));
     loaded->destroy_context =
         reinterpret_cast<PfnFfxDestroyContext>(GetProcAddress(module, "ffxDestroyContext"));
+    loaded->configure = reinterpret_cast<PfnFfxConfigure>(GetProcAddress(module, "ffxConfigure"));
     loaded->query = reinterpret_cast<PfnFfxQuery>(GetProcAddress(module, "ffxQuery"));
     loaded->dispatch = reinterpret_cast<PfnFfxDispatch>(GetProcAddress(module, "ffxDispatch"));
-    if (!loaded->create_context || !loaded->destroy_context || !loaded->query ||
-        !loaded->dispatch) {
+    if (!loaded->create_context || !loaded->destroy_context || !loaded->configure ||
+        !loaded->query || !loaded->dispatch) {
         LOG_WARNING(Render_Vulkan, "AMD FSR 4: the FidelityFX loader lacks its exports");
         FreeLibrary(module);
         return nullptr;
     }
     LOG_INFO(Render_Vulkan, "AMD FSR 4: FidelityFX SDK {} runtime loaded", SDK_VERSION);
+    // The loader brings in the upscaler and frame generation DLLs; they go with it, so the next
+    // game loads them afresh (kept loaded, frame generation kept the stopped game's device and the
+    // next game crashed; from Cheezer's AMD Superior).
     std::shared_ptr<const Loaded> shared{loaded.release(), [](const Loaded* l) {
                                              FreeLibrary(l->module);
+                                             for (const wchar_t* name :
+                                                  {L"amd_fidelityfx_framegeneration_vk.dll",
+                                                   L"amd_fidelityfx_upscaler_vk.dll"}) {
+                                                 for (int i = 0; i < 8; ++i) {
+                                                     const HMODULE provider =
+                                                         GetModuleHandleW(name);
+                                                     if (!provider || !FreeLibrary(provider)) {
+                                                         break;
+                                                     }
+                                                 }
+                                             }
                                              delete l;
                                          }};
     current = shared;
     return shared;
 }
 
+bool FrameGenerationLoaded() {
+    return GetModuleHandleW(L"amd_fidelityfx_framegeneration_vk.dll") != nullptr;
+}
+
 #else
+
+bool FrameGenerationLoaded() {
+    return false;
+}
 
 bool IsSignedByAmd(const std::filesystem::path&) {
     return false;

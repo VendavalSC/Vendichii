@@ -23,6 +23,7 @@ namespace Vulkan::FfxRuntime {
 struct Api {
     PfnFfxCreateContext create_context{};
     PfnFfxDestroyContext destroy_context{};
+    PfnFfxConfigure configure{};
     PfnFfxQuery query{};
     PfnFfxDispatch dispatch{};
 };
@@ -32,5 +33,8 @@ struct Api {
 /// passed are not checked again this session; the runtime stays loaded while a returned pointer
 /// lives.
 [[nodiscard]] std::shared_ptr<const Api> Acquire();
+
+/// Whether AMD's frame generation DLL is still in the process (nothing has unloaded it).
+[[nodiscard]] bool FrameGenerationLoaded();
 
 } // namespace Vulkan::FfxRuntime

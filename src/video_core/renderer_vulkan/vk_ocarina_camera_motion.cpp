@@ -30,6 +30,7 @@
 #include "video_core/host_shaders/ocarina_actor_motion_frag_spv.h"
 #include "video_core/host_shaders/ocarina_actor_motion_vert_spv.h"
 #include "video_core/renderer_vulkan/vk_ocarina_camera_motion.h"
+#include "video_core/renderer_vulkan/vk_amd_frame_gen.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_update_descriptor.h"
 #include "video_core/vulkan_common/vulkan_device.h"
@@ -1081,6 +1082,16 @@ bool OcarinaUpscaler::Record(VkImageView color, VkImageView depth, VkImageView t
         }
     }
     state.output_fsr4 = used_fsr4;
+    // AMD FSR frame generation (vk_amd_frame_gen.h): the frame's depth, camera and actor motion.
+    if (AmdFrameGen::Requested()) {
+        AmdFrameGen::Prepare(state.scheduler, {
+            .depth = {depth_image, VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT},
+            .motion_vectors = {*resources.motion, MOTION_FORMAT, VK_IMAGE_ASPECT_COLOR_BIT},
+            .render_size = extent,
+            .view_projection = current,
+            .reset = reset,
+        });
+    }
     // A resize can submit the inputs before recording evaluation, so keep the later tick.
     resources.tick = state.scheduler.CurrentTick();
     if (target) {
@@ -1104,8 +1115,11 @@ VideoCommon::OcarinaUpscaleBackend ResolveOcarinaUpscaler(const Device& device) 
 #ifdef EGLANTINE_STREAMLINE
     dlss_available = Streamline::IsDlssAvailable();
 #endif
+    // AMD frame generation reads the depth and motion this path makes: it needs the path on,
+    // with FSR 3.1 when nothing else upscales (as Cheezer's AMD Superior does).
     const auto backend = VideoCommon::SelectOcarinaUpscaler(
-        Settings::values.ocarina_fsr.GetValue(), Settings::values.nvidia_dlss.GetValue(),
+        Settings::values.ocarina_fsr.GetValue() || AmdFrameGen::Requested(),
+        Settings::values.nvidia_dlss.GetValue(),
         dlss_available, value ? value : "");
     if (backend == VideoCommon::OcarinaUpscaleBackend::Fsr && !Fsr3Upscaler::IsSupported(device)) {
         return VideoCommon::OcarinaUpscaleBackend::Native;
