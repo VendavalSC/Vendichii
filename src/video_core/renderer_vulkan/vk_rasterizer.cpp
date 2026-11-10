@@ -3124,6 +3124,18 @@ bool RasterizerVulkan::TryOcarinaUpscale(const ComputePipeline& pipeline, bool r
         color.format != PixelFormat::E5B9G9R9_FLOAT || target.format != PixelFormat::B10G11R11_FLOAT ||
         color.size.width != extent.width || color.size.height != extent.height ||
         color.ImageHandle() == target.ImageHandle() || depth.ImageHandle() == target.ImageHandle()) {
+        static u32 detail_logs{};
+        if (detail_logs < 8) {
+            ++detail_logs;
+            LOG_INFO(Render_Vulkan,
+                     "Ocarina temporal: upscale images: shader {:016x} 4k={} native={} extent {}x{} "
+                     "color {}x{} fmt {} target {}x{} fmt {} rescaled {}/{} samples {}/{}",
+                     pipeline.ShaderHash(), upscale_4k, native_size, extent.width, extent.height,
+                     color.size.width, color.size.height, static_cast<u32>(color.format),
+                     target.size.width, target.size.height, static_cast<u32>(target.format),
+                     color.IsRescaled(), target.IsRescaled(), static_cast<u32>(color.Samples()),
+                     static_cast<u32>(target.Samples()));
+        }
         return fail("unexpected upscale images");
     }
 
