@@ -312,12 +312,15 @@ std::vector<VirtualFile> ModPatchFiles(const VirtualDir& mod, const std::string&
     return out;
 }
 
+/// The built-in that holds Dark's Dynamic FPS routine (and keeps real speed above 60 fps).
+constexpr std::string_view FPS_UNLOCK_NAME = "FPS Unlock (built-in)";
+
 // Whether a mod is Dark's standalone Dynamic FPS, which Vendichii has built in: one of its patches
 // for Ocarina's main writes into the built-in's records (the call or the routine). Such a mod is
 // left out (not applied, not listed in Add-Ons) so the built-in, which the high refresh rate mode
 // switches live, is applied in its place. Mods overlapping the other built-ins still win.
 bool IsBuiltinDynamicFpsMod(u64 title_id, const VirtualDir& mod) {
-    const auto it = std::ranges::find(BUILTIN_PATCHES, DYNAMIC_FPS_NAME, &BuiltinPatch::name);
+    const auto it = std::ranges::find(BUILTIN_PATCHES, FPS_UNLOCK_NAME, &BuiltinPatch::name);
     if (it == BUILTIN_PATCHES.end() || it->title_id != title_id || mod == nullptr) {
         return false;
     }
@@ -325,7 +328,7 @@ bool IsBuiltinDynamicFpsMod(u64 title_id, const VirtualDir& mod) {
     // get no Dynamic FPS at all.
     if (const auto disabled = Settings::values.disabled_addons.find(title_id);
         disabled != Settings::values.disabled_addons.end() &&
-        std::ranges::find(disabled->second, std::string{DYNAMIC_FPS_NAME}) != disabled->second.end()) {
+        std::ranges::find(disabled->second, std::string{FPS_UNLOCK_NAME}) != disabled->second.end()) {
         return false;
     }
     const auto overlaps = [&](const std::pair<u64, u64>& range) {
