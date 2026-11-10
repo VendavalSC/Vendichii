@@ -270,7 +270,16 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
     INSERT(Settings, bg_blue, QString(), QString());
 
     INSERT(Settings, frame_gen, tr("Enable Frame Generation"), QString());
-    INSERT(Settings, frame_gen_type, tr("Frame Generation Type"), QString());
+    INSERT(Settings, frame_gen_type, tr("Frame Generation Type"),
+           tr("AMD FSR Frame Generation (Ocarina): AMD's frame generation fed with the game's "
+              "motion vectors, depth and a HUD mask (Windows, Resolution 1X, NVIDIA DLSS off; "
+              "restart Vendichii after picking it). Needs AMD's FidelityFX files, downloaded "
+              "from the FSR 4 option.
+AMD FSR 3 Frame Generation: AMD's interpolation from the "
+              "image alone, for any game."));
+    INSERT(Settings, amd_frame_gen_version, tr("AMD Frame Generation Version"),
+           tr("Auto: FSR 4 frame generation where AMD's driver offers it (Radeon RX 9000), FSR 3.1 "
+              "elsewhere. FSR 3.1: lighter. Takes effect when Vendichii restarts."));
     INSERT(Settings, frame_gen_multiplier, tr("Frame Generation Multiplier"), QString());
     INSERT(Settings, frame_gen_target_rate, tr("Target Frame Rate"), QString());
     INSERT(Settings, frame_gen_flow_scale_auto, tr("Auto Flow Scale"), QString());
@@ -612,7 +621,13 @@ std::unique_ptr<ComboboxTranslationMap> ComboboxEnumeration(QObject* parent) {
                           {
                               PAIR(FrameGenType, Lsfg, tr("Lossless Scaling (LSFG)")),
                               PAIR(FrameGenType, Fsr3, tr("Optical Flow Interpolation (built-in)")),
-                              PAIR(FrameGenType, AmdFsr3, tr("AMD FSR 3 Frame Generation")),
+                              PAIR(FrameGenType, AmdFsr3, tr("AMD FSR 3 Frame Generation (optical flow, any game)")),
+                              PAIR(FrameGenType, AmdFsr, tr("AMD FSR Frame Generation (Ocarina, motion vectors, restart)")),
+                          }});
+    translations->insert({Settings::EnumMetadata<Settings::AmdFrameGenVersion>::Index(),
+                          {
+                              PAIR(AmdFrameGenVersion, Auto, tr("Auto (FSR 4 where available)")),
+                              PAIR(AmdFrameGenVersion, Fsr31, tr("FSR 3.1 (faster)")),
                           }});
     translations->insert({Settings::EnumMetadata<Settings::ScalingFilter>::Index(),
                           {
