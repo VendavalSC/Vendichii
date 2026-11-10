@@ -322,6 +322,23 @@ public:
     }
 
     /// Returns main present queue family index.
+    /// The queue AMD's frame generation swapchain presents on from its own threads: never the
+    /// graphics queue. Null when AMD frame generation wasn't picked at startup or the GPU has no
+    /// spare present-capable queue.
+    VkQueue GetFrameGenPresentQueue() const {
+        return frame_gen_present_queue;
+    }
+
+    u32 GetFrameGenPresentFamily() const {
+        return frame_gen_present_family;
+    }
+
+    /// AMD frame generation's own queues in the present family: 0 presents, 1 is async compute,
+    /// 2 acquires images. Null past the count the GPU has to spare.
+    VkQueue GetFrameGenQueue(size_t index) const {
+        return index < frame_gen_queues.size() ? frame_gen_queues[index] : VK_NULL_HANDLE;
+    }
+
     u32 GetPresentFamily() const {
         return present_family;
     }
@@ -1314,6 +1331,11 @@ private:
     u32 instance_version{};      ///< Vulkan instance version.
     u32 graphics_family{};       ///< Main graphics queue family index.
     u32 present_family{};        ///< Main present queue family index.
+    std::optional<std::pair<u32, u32>> frame_gen_present; ///< Family and index for AMD frame gen.
+    u32 frame_gen_present_family{};
+    VkQueue frame_gen_present_queue{};
+    u32 frame_gen_queue_count{};
+    std::array<VkQueue, 3> frame_gen_queues{};
     bool graphics_family_sparse_binding{};
 
     struct Extensions {

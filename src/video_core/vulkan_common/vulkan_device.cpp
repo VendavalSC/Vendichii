@@ -494,7 +494,12 @@ namespace {
 /// float16 and, on RDNA 4, float8 on the device; the emulator's shaders use neither for it.
 bool WantsAmdFsr4(VkDriverId driver_id) {
 #ifdef _WIN32
-    return driver_id == VK_DRIVER_ID_AMD_PROPRIETARY && Settings::values.amd_fsr4.GetValue();
+    // AMD frame generation starts AMD's FSR 3.1 even with FSR 4 off (Cheezer's AMD Superior).
+    const bool frame_gen = Settings::values.frame_gen.GetValue() &&
+                           Settings::values.frame_gen_type.GetValue() ==
+                               Settings::FrameGenType::AmdFsr;
+    return driver_id == VK_DRIVER_ID_AMD_PROPRIETARY &&
+           (Settings::values.amd_fsr4.GetValue() || frame_gen);
 #else
     return false;
 #endif
@@ -819,6 +824,14 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
 
     graphics_queue = logical.GetQueue(graphics_family);
     present_queue = logical.GetQueue(present_family);
+    if (frame_gen_present) {
+        frame_gen_present_family = frame_gen_present->first;
+        for (u32 i = 0; i < frame_gen_queue_count; ++i) {
+            dld.vkGetDeviceQueue(*logical, frame_gen_present->first,
+                                 frame_gen_present->second + i, &frame_gen_queues[i]);
+        }
+        frame_gen_present_queue = frame_gen_queues[0];
+    }
 
 #ifdef EGLANTINE_STREAMLINE
     if (streamline_extensions) {
@@ -1972,6 +1985,38 @@ void Device::SetupFamilies(VkSurfaceKHR surface) {
     if (present) {
         present_family = *present;
     }
+#ifdef _WIN32
+    // AMD's frame generation swapchain presents from its own threads, so it gets a queue of its
+    // own: a compute family that can present (AMD), else a second graphics queue (NVIDIA, Intel).
+    // From Cheezer's AMD Superior.
+    if (surface && Settings::values.frame_gen.GetValue() &&
+        Settings::values.frame_gen_type.GetValue() == Settings::FrameGenType::AmdFsr) {
+        const u32 families = static_cast<u32>(queue_family_properties.size());
+        for (u32 index = 0; index < families && !frame_gen_present; ++index) {
+            const auto& family = queue_family_properties[index];
+            if (index != graphics_family && family.queueCount > 0 &&
+                (family.queueFlags & VK_QUEUE_COMPUTE_BIT) &&
+                physical.GetSurfaceSupportKHR(index, surface)) {
+                frame_gen_present = std::pair{index, 0u};
+                frame_gen_queue_count = (std::min)(family.queueCount, 3u);
+            }
+        }
+        if (!frame_gen_present && queue_family_properties[graphics_family].queueCount > 1 &&
+            physical.GetSurfaceSupportKHR(graphics_family, surface)) {
+            frame_gen_present = std::pair{graphics_family, 1u};
+            frame_gen_queue_count =
+                (std::min)(queue_family_properties[graphics_family].queueCount - 1, 3u);
+        }
+        if (frame_gen_present) {
+            LOG_INFO(Render_Vulkan,
+                     "AMD frame generation: presents on queue family {} index {} ({} queues)",
+                     frame_gen_present->first, frame_gen_present->second, frame_gen_queue_count);
+        } else {
+            LOG_WARNING(Render_Vulkan, "AMD frame generation: no spare present queue on this GPU, "
+                                       "frame generation is off");
+        }
+    }
+#endif
 }
 
 bool Device::TryReserveCustomBorderColorSamplers(size_t count) const {
@@ -2142,21 +2187,28 @@ void Device::CollectToolingInfo() {
 
 std::vector<VkDeviceQueueCreateInfo> Device::GetDeviceQueueCreateInfos() const {
     static constexpr float QUEUE_PRIORITY = 1.0f;
+    static constexpr std::array<float, 4> QUEUE_PRIORITIES{1.0f, 1.0f, 1.0f, 1.0f};
 
     ::Common::unordered_set<u32> unique_queue_families{graphics_family, present_family};
+    if (frame_gen_present) {
+        unique_queue_families.insert(frame_gen_present->first);
+    }
     std::vector<VkDeviceQueueCreateInfo> queue_cis;
     queue_cis.reserve(unique_queue_families.size());
 
     for (const u32 queue_family : unique_queue_families) {
+        const u32 count = frame_gen_present && frame_gen_present->first == queue_family
+                              ? frame_gen_present->second + frame_gen_queue_count
+                              : 1;
         auto& ci = queue_cis.emplace_back(VkDeviceQueueCreateInfo{
             .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
             .queueFamilyIndex = queue_family,
-            .queueCount = 1,
+            .queueCount = count,
             .pQueuePriorities = nullptr,
         });
-        ci.pQueuePriorities = &QUEUE_PRIORITY;
+        ci.pQueuePriorities = count > 1 ? QUEUE_PRIORITIES.data() : &QUEUE_PRIORITY;
     }
 
     return queue_cis;
