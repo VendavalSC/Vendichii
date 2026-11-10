@@ -274,8 +274,7 @@ std::unique_ptr<TranslationMap> InitializeTranslations(QObject* parent) {
            tr("AMD FSR Frame Generation (Ocarina): AMD's official frame generation fed with the "
               "game's camera and Link's motion and its depth (Windows, Resolution 1X; restart "
               "Vendichii after picking it). Needs AMD's FidelityFX files, downloaded from the "
-              "FSR 4 option.
-AMD FSR 3 Frame Generation: AMD's interpolation from the image "
+              "FSR 4 option.\nAMD FSR 3 Frame Generation: AMD's interpolation from the image "
               "alone, for any game."));
     INSERT(Settings, amd_frame_gen_version, tr("AMD Frame Generation Version"),
            tr("Auto: FSR 4 frame generation where AMD's driver offers it (Radeon RX 9000), FSR 3.1 "
