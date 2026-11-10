@@ -2112,6 +2112,7 @@ void MainWindow::BootGame(const QString& filename, Service::AM::FrontendAppletPa
 
     if (loader != nullptr && loader->ReadProgramId(title_id) == Loader::ResultStatus::Success &&
         type == StartGameType::Normal) {
+        PrepareBundledRecipe(title_id, filename.toStdString());
         // Load per game settings
         const auto file_path =
             std::filesystem::path{Common::U16StringFromBuffer(filename.utf16(), filename.size())};
@@ -3029,11 +3030,57 @@ void MainWindow::OnGameListDumpRomFS(u64 program_id, const std::string& game_pat
 
 // A precompile recipe (video_core/nx2_recipe.h) and the game's own shader programs give this
 // build's precompiled pipeline file, prepared at the game's next boot.
-void MainWindow::OnGameListPrepareShadersFromRecipe(u64 program_id, const std::string& game_path) {
+void MainWindow::PrepareBundledRecipe(u64 program_id, const std::string& game_path) {
+    const auto shader_dir = Common::FS::GetEdenPath(Common::FS::EdenPath::ShaderDir) /
+                            fmt::format("{:016x}", program_id);
+    const auto prepared = shader_dir / fmt::format("precompiled.fork-v{}.nx2prep",
+                                                   VideoCommon::VulkanPipelineCacheVersion);
+    const auto marker = shader_dir / "vendichii-bundled-recipe.txt";
+    std::error_code error;
+    if (std::filesystem::exists(prepared, error) || std::filesystem::exists(marker, error)) {
+        return;
+    }
+    const auto recipes = Common::FS::GetExeDirectory() / "recipes";
+    if (!std::filesystem::is_directory(recipes, error)) {
+        return;
+    }
+    for (const auto& entry : std::filesystem::directory_iterator(recipes, error)) {
+        if (entry.path().extension() != ".nx2recipe") {
+            continue;
+        }
+        Common::FS::IOFile file{entry.path(), Common::FS::FileAccessMode::Read,
+                                Common::FS::FileType::BinaryFile};
+        std::vector<u8> bytes(file.IsOpen() ? file.GetSize() : 0);
+        if (bytes.empty() || file.ReadSpan(std::span<u8>{bytes}) != bytes.size()) {
+            continue;
+        }
+        const auto header = VideoCommon::Nx2Recipe::ReadHeader(bytes);
+        if (!header || header->title_id != program_id ||
+            header->cache_version != VideoCommon::VulkanPipelineCacheVersion) {
+            continue;
+        }
+        LOG_INFO(Frontend, "Preparing precompiled shaders from the bundled recipe {}",
+                 Common::FS::PathToUTF8String(entry.path()));
+        OnGameListPrepareShadersFromRecipe(
+            program_id, game_path, QString::fromStdU16String(entry.path().u16string()));
+        // Asked once per game: a failed or cancelled assembly is not retried on every boot (the
+        // game list's "Prepare Precompiled Shaders from Recipe..." still runs it).
+        Common::FS::CreateDirs(shader_dir);
+        Common::FS::IOFile note{marker, Common::FS::FileAccessMode::Write,
+                                Common::FS::FileType::TextFile};
+        note.WriteString(Common::FS::PathToUTF8String(entry.path().filename()));
+        return;
+    }
+}
+
+void MainWindow::OnGameListPrepareShadersFromRecipe(u64 program_id, const std::string& game_path,
+                                                    const QString& bundled_recipe) {
     const QString title = tr("Prepare Precompiled Shaders");
-    const QString recipe_path = QFileDialog::getOpenFileName(
-        this, tr("Select Precompile Recipe"), {},
-        tr("Precompile recipe (*.nx2recipe);;All files (*.*)"));
+    const QString recipe_path =
+        !bundled_recipe.isEmpty()
+            ? bundled_recipe
+            : QFileDialog::getOpenFileName(this, tr("Select Precompile Recipe"), {},
+                                           tr("Precompile recipe (*.nx2recipe);;All files (*.*)"));
     if (recipe_path.isEmpty()) {
         return;
     }
@@ -3214,8 +3261,8 @@ void MainWindow::OnGameListPrepareShadersFromRecipe(u64 program_id, const std::s
                     .arg(*game_version);
     }
     text += QStringLiteral("\n\n") +
-            tr("NVIDIA: set Shader Cache Size to Unlimited in the NVIDIA Control Panel, or the "
-               "driver keeps only part of them.");
+            tr("They are built the first time the game starts (about 15-20 minutes, once); let "
+               "it finish. Vendichii asks NVIDIA's driver for a 10 GB shader cache for itself.");
     QMessageBox::information(this, title, text);
 }
 

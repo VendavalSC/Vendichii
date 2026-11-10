@@ -416,6 +416,10 @@ struct Values {
                                                   false};
     // NVIDIA DLSS (through NVIDIA Streamline) in place of a game's DLSS.
     SwitchableSetting<bool> nvidia_dlss{linkage, false, "nvidia_dlss", Category::Renderer};
+    // The DLSS model (preset) for every mode: K by default; Default leaves the choice to NVIDIA.
+    // EDEN_NX2_DLSS_PRESET still overrides it. From Fritchii v5.5 (Frizti).
+    Setting<DlssPreset> nvidia_dlss_preset{linkage, DlssPreset::K, "nvidia_dlss_preset",
+                                           Category::Renderer};
     SwitchableSetting<bool> ocarina_fsr{linkage, false, "ocarina_fsr", Category::Renderer};
     // AMD FSR 4 in place of FSR 3.1 where FSR replaces a game's upscaler (Windows, AMD's driver).
     SwitchableSetting<bool> amd_fsr4{linkage, false, "amd_fsr4", Category::Renderer};

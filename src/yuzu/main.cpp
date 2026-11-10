@@ -83,6 +83,15 @@ static Qt::HighDpiScaleFactorRoundingPolicy GetHighDpiRoundingPolicy() {
 
 int main(int argc, char* argv[]) {
     LoadNx2Switches(argv[0]);
+    // NVIDIA's driver shader cache must hold Ocarina's ~120,000 prepared pipelines; newer drivers
+    // no longer show the Control Panel's Shader Cache Size. The driver reads these variables, for
+    // this process only. A value already set wins. From Fritchii v5.5 (Frizti).
+    if (!qEnvironmentVariableIsSet("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP")) {
+        qputenv("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1");
+    }
+    if (!qEnvironmentVariableIsSet("__GL_SHADER_DISK_CACHE_SIZE")) {
+        qputenv("__GL_SHADER_DISK_CACHE_SIZE", "10737418240"); // 10 GiB
+    }
 #if YUZU_ROOM
     bool launch_room = false;
     for (int i = 1; i < argc; i++) {
