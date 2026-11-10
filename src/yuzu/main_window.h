@@ -361,8 +361,10 @@ private slots:
     void OnGameListRemovePlayTimeData(u64 program_id);
     void OnGameListSetPlayTime(u64 program_id);
     void OnGameListDumpRomFS(u64 program_id, const std::string& game_path, DumpRomFSTarget target);
-    void OnGameListPrepareShadersFromRecipe(u64 program_id, const std::string& game_path,
-                                            const QString& bundled_recipe = {});
+    void OnGameListPrepareShadersFromRecipe(u64 program_id, const std::string& game_path);
+    /// Assembles a recipe (asks for the file when `recipe` is empty).
+    void PrepareShadersFromRecipe(u64 program_id, const std::string& game_path,
+                                  const QString& recipe);
     /// Before a game boots: a recipe in recipes\ beside the exe for this game and shader cache
     /// version, with no precompiled file made from it yet, is assembled without asking.
     void PrepareBundledRecipe(u64 program_id, const std::string& game_path);

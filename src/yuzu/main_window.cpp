@@ -3061,8 +3061,8 @@ void MainWindow::PrepareBundledRecipe(u64 program_id, const std::string& game_pa
         }
         LOG_INFO(Frontend, "Preparing precompiled shaders from the bundled recipe {}",
                  Common::FS::PathToUTF8String(entry.path()));
-        OnGameListPrepareShadersFromRecipe(
-            program_id, game_path, QString::fromStdU16String(entry.path().u16string()));
+        PrepareShadersFromRecipe(program_id, game_path,
+                                 QString::fromStdU16String(entry.path().u16string()));
         // Asked once per game: a failed or cancelled assembly is not retried on every boot (the
         // game list's "Prepare Precompiled Shaders from Recipe..." still runs it).
         (void)Common::FS::CreateDirs(shader_dir);
@@ -3073,8 +3073,12 @@ void MainWindow::PrepareBundledRecipe(u64 program_id, const std::string& game_pa
     }
 }
 
-void MainWindow::OnGameListPrepareShadersFromRecipe(u64 program_id, const std::string& game_path,
-                                                    const QString& bundled_recipe) {
+void MainWindow::OnGameListPrepareShadersFromRecipe(u64 program_id, const std::string& game_path) {
+    PrepareShadersFromRecipe(program_id, game_path, {});
+}
+
+void MainWindow::PrepareShadersFromRecipe(u64 program_id, const std::string& game_path,
+                                          const QString& bundled_recipe) {
     const QString title = tr("Prepare Precompiled Shaders");
     const QString recipe_path =
         !bundled_recipe.isEmpty()
