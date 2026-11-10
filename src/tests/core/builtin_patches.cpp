@@ -45,8 +45,14 @@ constexpr size_t DynamicRoutineOffset = sizeof(Loader::NSOHeader) + 0x3C46200;
 constexpr size_t DynamicStateOffset = sizeof(Loader::NSOHeader) + 0x4E9FE00;
 constexpr size_t DynamicRoutineSize = 120;
 constexpr size_t UnlockRoutineSize = 128;
+constexpr size_t UnlockStateSize = 0xA0;
 constexpr u32 DynamicCallInstruction = 0x94D57D4F;
 constexpr u32 DynamicOriginalInstruction = 0x1E201828;
+constexpr size_t WaterHookOffset = sizeof(Loader::NSOHeader) + 0x475F8;
+constexpr size_t WaterRoutineOffset = sizeof(Loader::NSOHeader) + 0x3C46280;
+constexpr size_t WaterRoutineSize = 128;
+constexpr u32 WaterOriginalInstruction = 0x1E380009;
+constexpr u32 WaterHookInstruction = 0x14EFFB22;
 
 constexpr std::array<std::pair<Common::FS::EdenPath, const char*>, 4> TestDirectories{{
     {Common::FS::EdenPath::NANDDir, "nand"},
@@ -229,7 +235,7 @@ namespace {
 
 std::vector<u8> MakeDynamicMain() {
     auto nso = MakeMain(OcarinaBuildId, TbzInstruction);
-    nso.resize(DynamicStateOffset + 16);
+    nso.resize(DynamicStateOffset + UnlockStateSize);
     Loader::NSOHeader header;
     std::memcpy(&header, nso.data(), sizeof(header));
     header.segments[0].size = 63201744;
@@ -241,6 +247,8 @@ std::vector<u8> MakeDynamicMain() {
     std::memcpy(nso.data(), &header, sizeof(header));
     std::memcpy(nso.data() + DynamicCallOffset, &DynamicOriginalInstruction,
                 sizeof(DynamicOriginalInstruction));
+    std::memcpy(nso.data() + WaterHookOffset, &WaterOriginalInstruction,
+                sizeof(WaterOriginalInstruction));
     return nso;
 }
 
@@ -272,6 +280,12 @@ TEST_CASE("Built-in FPS Unlock defaults on and replaces Dynamic FPS", "[patch_ma
             fmt::format("IPS, replaced by {} when it applies", FpsUnlock));
     auto patched = manager.PatchNSO(nso, "main");
     REQUIRE(WordAt(patched, DynamicCallOffset) == DynamicCallInstruction);
+    REQUIRE(WordAt(patched, WaterHookOffset) == WaterHookInstruction);
+    REQUIRE(Common::HexToString(std::span{patched}.subspan(WaterRoutineOffset, WaterRoutineSize)) ==
+            "C99200B0298138910B0180522A0140F95F0115EB80020054294100916B05007161FFFF54"
+            "290102D10B0180522A0140F96A0100B4294100916B05007181FFFF54294102D12A0140B9"
+            "4B0500116B0900122B0100B92941009129110A8B350100F93F0900B9210940BD0028211E"
+            "01C0251E0038211E200900BD2900381EC0041017");
     REQUIRE(routine(patched, UnlockRoutineSize) ==
             std::string{RoutineHead} + "E300001C4268231EC300001C4278231E4840201EC0035FD6"
                                        "1F2003D50AD7A33C0000C040");
@@ -293,6 +307,8 @@ TEST_CASE("Built-in FPS Unlock defaults on and replaces Dynamic FPS", "[patch_ma
             std::string{RoutineHead} + "C300001C0309231E4020231E4D0000544840201EC0035FD6"
                                        "0AD7833F");
     REQUIRE(WordAt(patched, DynamicRoutineOffset + DynamicRoutineSize) == 0);
+    REQUIRE(WordAt(patched, WaterHookOffset) == WaterOriginalInstruction);
+    REQUIRE(WordAt(patched, WaterRoutineOffset) == 0);
 
     // Both unchecked: hook and code cave stay untouched.
     Settings::values.disabled_addons[OcarinaTitleId] = {std::string{FpsUnlock},
@@ -300,6 +316,8 @@ TEST_CASE("Built-in FPS Unlock defaults on and replaces Dynamic FPS", "[patch_ma
     patched = manager.PatchNSO(nso, "main");
     REQUIRE(WordAt(patched, DynamicCallOffset) == DynamicOriginalInstruction);
     REQUIRE(WordAt(patched, DynamicRoutineOffset) == 0);
+    REQUIRE(WordAt(patched, WaterHookOffset) == WaterOriginalInstruction);
+    REQUIRE(WordAt(patched, WaterRoutineOffset) == 0);
 
     Settings::values.disabled_addons[OcarinaTitleId] = {std::string{MaxResolution}};
     patched = manager.PatchNSO(nso, "main");
@@ -309,6 +327,34 @@ TEST_CASE("Built-in FPS Unlock defaults on and replaces Dynamic FPS", "[patch_ma
     const auto unrelated = context.Manager(OtherTitleId).GetPatches();
     REQUIRE(std::ranges::find(unrelated, DynamicFps, &FileSys::Patch::name) == unrelated.end());
     REQUIRE(std::ranges::find(unrelated, FpsUnlock, &FileSys::Patch::name) == unrelated.end());
+}
+
+TEST_CASE("Built-in FPS Unlock rejects invalid water hook, cave or state transactionally",
+          "[patch_manager]") {
+    PatchManagerTestContext context;
+    Settings::values.disabled_addons[OcarinaTitleId] = {std::string{MaxResolution},
+                                                     std::string{DynamicFps}};
+    auto nso = MakeDynamicMain();
+    SECTION("Wrong original water hook") {
+        nso[WaterHookOffset] ^= 1;
+    }
+    SECTION("Nonzero water code cave") {
+        nso[WaterRoutineOffset + WaterRoutineSize - 1] = 1;
+    }
+    SECTION("Nonzero accumulator state") {
+        nso[DynamicStateOffset + UnlockStateSize - 1] = 1;
+    }
+    SECTION("Incomplete accumulator state") {
+        nso.resize(DynamicStateOffset + UnlockStateSize - 1);
+    }
+    SECTION("Accumulator state outside BSS") {
+        Loader::NSOHeader header;
+        std::memcpy(&header, nso.data(), sizeof(header));
+        header.segments[2].bss_size =
+            0x4E9FE00 + UnlockStateSize - 1 - header.segments[2].location - header.segments[2].size;
+        std::memcpy(nso.data(), &header, sizeof(header));
+    }
+    REQUIRE(context.Manager().PatchNSO(nso, "main") == nso);
 }
 
 TEST_CASE("Built-in Dynamic FPS rejects mismatched or truncated modules transactionally",
