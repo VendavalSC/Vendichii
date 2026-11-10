@@ -3065,10 +3065,10 @@ void MainWindow::PrepareBundledRecipe(u64 program_id, const std::string& game_pa
             program_id, game_path, QString::fromStdU16String(entry.path().u16string()));
         // Asked once per game: a failed or cancelled assembly is not retried on every boot (the
         // game list's "Prepare Precompiled Shaders from Recipe..." still runs it).
-        Common::FS::CreateDirs(shader_dir);
+        (void)Common::FS::CreateDirs(shader_dir);
         Common::FS::IOFile note{marker, Common::FS::FileAccessMode::Write,
                                 Common::FS::FileType::TextFile};
-        note.WriteString(Common::FS::PathToUTF8String(entry.path().filename()));
+        (void)note.WriteString(Common::FS::PathToUTF8String(entry.path().filename()));
         return;
     }
 }
