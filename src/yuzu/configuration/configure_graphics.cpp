@@ -276,9 +276,6 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
         if (setting->Id() == Settings::values.hdr.Id() ||
             setting->Id() == Settings::values.hdr_reference_white.Id() ||
             setting->Id() == Settings::values.hdr_peak_luminance.Id()) {
-        if (setting->Id() == Settings::values.hdr.Id() ||
-            setting->Id() == Settings::values.hdr_reference_white.Id() ||
-            setting->Id() == Settings::values.hdr_peak_luminance.Id()) {
             hdr_widgets.push_back(widget);
         }
         if (nvidia_dlss_checkbox && (setting->Id() == Settings::values.nvidia_dlss_quality.Id() ||
