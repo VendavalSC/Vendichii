@@ -4238,7 +4238,7 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
         return NULL_BINDING;
     }
 
-    const bool reads_size_word = !(table_pointer && !is_written) && !mapping_sized;
+    const bool reads_size_word = !(table_pointer && !is_written) && !native_pointer;
     const u64 next_qword = reads_size_word ? gpu_memory->Read<u64>(ssbo_addr + 8) : 0;
     const u32 alignment = runtime.GetStorageBufferAlignment();
     struct CachedBinding {

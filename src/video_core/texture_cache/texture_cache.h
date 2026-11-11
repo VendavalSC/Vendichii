@@ -156,9 +156,17 @@ void TextureCache<P>::RunGarbageCollector(bool out_of_memory) {
         // EDEN_NX2_TC_MIN_AGE=<frames>: never evict images used more recently. 150 by default
         // (El-Sashok's oot-nx2, via Donkeykong Crazy): Ocarina reuses its transient targets
         // within that window, and evicting them made it recreate and upload them again.
-        static const u64 min_age = [] {
+        // Only on cards with 12 GiB or more: an 8 GiB card (RX 7600) ran out of video memory, and
+        // then shaders failed to build, while images it could have freed were kept.
+        static const u64 min_age = [this] {
             const char* value = std::getenv("EDEN_NX2_TC_MIN_AGE");
-            return value != nullptr ? std::strtoull(value, nullptr, 10) : 150ULL;
+            if (value != nullptr) {
+                return std::strtoull(value, nullptr, 10);
+            }
+            if constexpr (HAS_DEVICE_MEMORY_INFO) {
+                return runtime.GetDeviceLocalMemory() >= 12_GiB ? 150ULL : 0ULL;
+            }
+            return 0ULL;
         }();
         ticks_to_destroy = (std::max)(ticks_to_destroy, min_age);
         num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
