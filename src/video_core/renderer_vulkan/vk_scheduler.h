@@ -207,6 +207,7 @@ public:
             // Pending uploads precede every other recorded command, including upload-buffer work.
             FlushUploads();
         }
+        ++record_serial;
         if (chunk->Record(command)) {
             return;
         }
@@ -222,6 +223,13 @@ public:
                 command(cmdbuf);
             });
     }
+
+    /// Whether anything was recorded since the last Flush or Finish.
+    [[nodiscard]] bool RecordedSinceSubmit() const noexcept {
+        return record_serial != submitted_serial || uploads_pending;
+    }
+    /// Counts a flush skipped because nothing was recorded (GPU profile).
+    static void CountSkippedFlush();
 
     /// Whether the recording thread submitted `tick` within 20 ms.
     [[nodiscard]] bool WaitForSubmission(u64 tick) const {
@@ -337,6 +345,8 @@ public:
 private:
     std::chrono::steady_clock::time_point last_flush{};
     bool flush_pending{};
+    u64 record_serial{};    ///< Commands recorded
+    u64 submitted_serial{}; ///< record_serial at the last Flush or Finish
 
     class Command {
     public:
