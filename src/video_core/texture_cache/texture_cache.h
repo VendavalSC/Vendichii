@@ -211,7 +211,10 @@ void TextureCache<P>::RunGarbageCollector(bool out_of_memory) {
             }
             return 0ULL;
         }();
-        ticks_to_destroy = (std::max)(ticks_to_destroy, min_age);
+        // Never in the emergency pass: it would keep images under critical VRAM pressure (#1311).
+        if (!aggressive_mode) {
+            ticks_to_destroy = (std::max)(ticks_to_destroy, min_age);
+        }
         num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
         // Past the critical memory, 40 images a frame is not enough where the game makes more:
         // breaking pots in Ocarina of Time's Hyrule Castle makes ~55 a frame (25 384x384 shadow
@@ -223,7 +226,7 @@ void TextureCache<P>::RunGarbageCollector(bool out_of_memory) {
             const u64 over = total_used_memory - critical_memory;
             num_iterations += static_cast<size_t>((std::min)(over / 2_MiB, u64{1024}));
             if (over >= 1_GiB) {
-                ticks_to_destroy = (std::max)(min_age, u64{3});
+                ticks_to_destroy = 3;
             }
         }
     };
