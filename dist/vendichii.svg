@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16324a"/>
+      <stop offset="1" stop-color="#0b1a2a"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#3f9b3a"/>
+      <stop offset="0.55" stop-color="#7cc84a"/>
+      <stop offset="1" stop-color="#c3e86a"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)"/>
+  <!-- wind streaks, carrying the leaf up and to the right -->
+  <g fill="none" stroke="#bfe3f2" stroke-linecap="round">
+    <path d="M30 168 C 70 160, 92 146, 118 134" stroke-width="9" opacity="0.95"/>
+    <path d="M40 198 C 92 196, 132 182, 166 160 C 186 147, 206 152, 204 168 C 202 182, 184 184, 178 174"
+          stroke-width="8" opacity="0.8"/>
+    <path d="M44 120 C 66 110, 80 102, 96 96" stroke-width="7" opacity="0.6"/>
+  </g>
+  <!-- the leaf, tilted as it is blown -->
+  <g transform="translate(160 98) rotate(-38)">
+    <path d="M-62 0 C -42 -40, 20 -48, 62 -6 C 26 40, -38 36, -62 0 Z" fill="url(#leaf)"/>
+    <path d="M-74 4 Q -66 2 -60 0" stroke="#3f9b3a" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <path d="M-58 0 Q 0 -2 58 -6" stroke="#2f7a2c" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+    <g stroke="#2f7a2c" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.85">
+      <path d="M-30 -1 Q -18 -14 -6 -24"/>
+      <path d="M-2 -2 Q 10 -14 22 -22"/>
+      <path d="M26 -1 Q 34 -9 42 -14"/>
+      <path d="M-30 -1 Q -18 12 -6 22"/>
+      <path d="M-2 -1 Q 10 12 22 20"/>
+      <path d="M26 0 Q 34 7 42 12"/>
+    </g>
+  </g>
+</svg>
