@@ -261,6 +261,8 @@ private:
     /// gets new sample positions each frame (the game renders without jitter). The offset goes to
     /// FSR with the frame.
     void UpdateOcarinaJitter();
+    /// Copy the upscaled scene before the game draws its HUD into it (AMD frame generation).
+    void SaveOcarinaPreHud(VkImage source, VkFormat format, VkExtent2D extent);
     void TrackOcarinaActor(u64 shader_hash, bool is_indexed, bool is_indirect);
     bool TryOcarinaUpscale(const ComputePipeline& pipeline, bool replace);
     void ReadOcarinaActor(struct OcarinaActorMesh& mesh);
@@ -325,6 +327,14 @@ private:
     std::optional<u64> oot_effects_frame;
     GPUVAddr oot_effects_address{};
     VkImageView oot_effects_scene{};
+    vk::Image oot_pre_hud;
+    vk::ImageView oot_pre_hud_view;
+    VkExtent2D oot_pre_hud_extent{};
+    VkFormat oot_pre_hud_format{};
+    std::optional<u64> oot_pre_hud_frame;
+    VkImage oot_scene_image{};  ///< The upscaled scene this frame, only compared, never used
+    VkImageView oot_hud_view{}; ///< That image as the last HUD draw into it had it bound
+    std::optional<u64> oot_hud_frame;
     struct OcarinaActorPose {
         u64 frame{};
         const Tegra::MemoryManager* channel{};

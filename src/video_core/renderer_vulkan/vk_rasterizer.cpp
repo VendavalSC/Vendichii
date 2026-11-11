@@ -1144,8 +1144,30 @@ void RasterizerVulkan::PrepareDraw(bool is_indexed, Func&& draw_func, bool is_in
     constexpr u64 final_vertex = 0x16aff33d999f993fULL;
     constexpr u64 final_fragment = 0x52402d8e8ab55263ULL;
     const auto hashes = pipeline->ShaderHashes();
-    if (oot_4k_scene_frame == render_trace_frame && hashes[5] == final_fragment &&
-        std::ranges::find(hashes, final_vertex) != hashes.end()) {
+    const bool final_pass = hashes[5] == final_fragment &&
+                            std::ranges::find(hashes, final_vertex) != hashes.end();
+    if (oot_pre_hud_frame == render_trace_frame) {
+        if (final_pass) {
+            // The HUD is drawn into the upscaled scene, which the final pass reads: mask it here,
+            // while that image still holds this frame.
+            if (oot_hud_frame == render_trace_frame && oot_hud_view && oot_live_dlss) {
+                oot_live_dlss->MakeHudMask(*oot_pre_hud_view, oot_hud_view, oot_pre_hud_extent);
+            }
+            oot_pre_hud_frame.reset();
+            oot_hud_frame.reset();
+            oot_hud_view = VK_NULL_HANDLE;
+        } else if (const auto target_id = texture_cache.GetRenderTargets().color_buffer_ids[0]) {
+            // A HUD draw into the upscaled scene: keep the view it has bound for the mask.
+            auto& view = texture_cache.GetImageView(target_id);
+            if (view.ImageHandle() == oot_scene_image && !view.IsRescaled() &&
+                view.size.width == oot_pre_hud_extent.width &&
+                view.size.height == oot_pre_hud_extent.height) {
+                oot_hud_view = view.Handle(Shader::TextureType::Color2D);
+                oot_hud_frame = render_trace_frame;
+            }
+        }
+    }
+    if (oot_4k_scene_frame == render_trace_frame && final_pass) {
         const auto target_id = texture_cache.GetRenderTargets().color_buffer_ids[0];
         if (target_id) {
             const auto& target = texture_cache.GetImageView(target_id);
@@ -3308,6 +3330,16 @@ bool RasterizerVulkan::TryOcarinaUpscale(const ComputePipeline& pipeline, bool r
             oot_4k_guest_present = VK_NULL_HANDLE;
         }
         oot_dlss_frame = render_trace_frame;
+        oot_hud_frame.reset();
+        oot_hud_view = VK_NULL_HANDLE;
+        static const bool hud_mask = [] {
+            const char* const value = std::getenv("EDEN_NX2_AMD_FG_HUD_MASK");
+            return !value || value[0] != '0';
+        }();
+        if (AmdFrameGen::Requested() && hud_mask && !four_k) {
+            oot_scene_image = target.ImageHandle();
+            SaveOcarinaPreHud(oot_scene_image, output_format, target_extent);
+        }
         // AMD's jitter phase count for FSR: 8 * (output / render width)^2, so 18 for 1440p -> 4K
         // and 8 for native AA.
         const f32 ratio = static_cast<f32>(output_extent.width) / static_cast<f32>(extent.width);
@@ -3320,6 +3352,92 @@ bool RasterizerVulkan::TryOcarinaUpscale(const ComputePipeline& pipeline, bool r
         texture_cache_runtime.ocarina_fsr_failed = true; // samplers drop the FSR LOD bias
         return false;
     }
+}
+
+void RasterizerVulkan::SaveOcarinaPreHud(VkImage source, VkFormat format, VkExtent2D extent) {
+    const bool create = !oot_pre_hud || oot_pre_hud_extent.width != extent.width ||
+                        oot_pre_hud_extent.height != extent.height || oot_pre_hud_format != format;
+    if (create) {
+        scheduler.Finish();
+        oot_pre_hud = memory_allocator.CreateImage({
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = format,
+            .extent = {extent.width, extent.height, 1},
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        });
+        oot_pre_hud_view = device.GetLogical().CreateImageView({
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .image = *oot_pre_hud,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = format,
+            .components = {},
+            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+        });
+        oot_pre_hud_extent = extent;
+        oot_pre_hud_format = format;
+    }
+    const VkImage destination = *oot_pre_hud;
+    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.Record([source, destination, extent, create](vk::CommandBuffer cmdbuf) {
+        constexpr VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        const auto barrier = [&](VkImage image, VkAccessFlags src, VkAccessFlags dst,
+                                 VkImageLayout old_layout) {
+            return VkImageMemoryBarrier{
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .pNext = nullptr,
+                .srcAccessMask = src,
+                .dstAccessMask = dst,
+                .oldLayout = old_layout,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = image,
+                .subresourceRange = range,
+            };
+        };
+        const std::array before{
+            barrier(source, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                    VK_ACCESS_TRANSFER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL),
+            barrier(destination, VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                    create ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_GENERAL),
+        };
+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                               {}, {}, before);
+        const VkImageCopy copy{
+            .srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+            .srcOffset = {},
+            .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+            .dstOffset = {},
+            .extent = {extent.width, extent.height, 1},
+        };
+        cmdbuf.CopyImage(source, VK_IMAGE_LAYOUT_GENERAL, destination, VK_IMAGE_LAYOUT_GENERAL,
+                         copy);
+        const std::array after{
+            barrier(source, VK_ACCESS_TRANSFER_READ_BIT,
+                    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                        VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+                    VK_IMAGE_LAYOUT_GENERAL),
+            barrier(destination, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                    VK_IMAGE_LAYOUT_GENERAL),
+        };
+        cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0,
+                               {}, {}, after);
+    });
+    scheduler.InvalidateState();
+    oot_pre_hud_frame = render_trace_frame;
 }
 
 bool RasterizerVulkan::FrameDumpBuffers(bool compute, std::span<const u64> shader_hashes) {

@@ -51,6 +51,10 @@ public:
     /// Mark the pixels those glows and particles changed since SaveEffectsBase, so Record can
     /// tell the temporal upscaler to use this frame's colour there.
     void MarkEffects(VkImageView scene, u64 frame);
+    /// For AMD frame generation: mark where the HUD is, the pixels that changed between the
+    /// upscaled scene (before_hud) and the same image once the game drew its HUD (after_hud).
+    /// The next Record keeps those pixels still in the generated frames.
+    void MakeHudMask(VkImageView before_hud, VkImageView after_hud, VkExtent2D extent);
     VkImage CompositedImage() const;
     VkImageView CompositedView() const;
 

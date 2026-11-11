@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <optional>
+#include <utility>
 
 #include "common/logging.h"
 #include "common/settings.h"
@@ -20,6 +21,9 @@
 #include "video_core/host_shaders/ocarina_dlss_4k_reference_comp_spv.h"
 #include "video_core/host_shaders/ocarina_dlss_bias_comp_spv.h"
 #include "video_core/host_shaders/ocarina_dlss_effects_comp_spv.h"
+#include "video_core/host_shaders/ocarina_hud_depth_comp_spv.h"
+#include "video_core/host_shaders/ocarina_hud_mask_comp_spv.h"
+#include "video_core/host_shaders/ocarina_hud_motion_comp_spv.h"
 #include "video_core/renderer_vulkan/vk_master_semaphore.h"
 #ifdef EGLANTINE_STREAMLINE
 #include "video_core/renderer_vulkan/vk_streamline_dlss.h"
@@ -587,9 +591,11 @@ public:
                        std::span<const u32> code)
         : ComputePass(device_, scheduler, pool, bindings, templates, bank, push, code) {}
 
+    /// `preserve` keeps the output's contents (a pass that changes only some of its pixels).
     void Record(Scheduler& scheduler, const void* descriptors, VkImage output, VkExtent2D extent,
-                u32 control = 0) {
-        scheduler.Record([this, descriptors, output, extent, control](vk::CommandBuffer cmd) {
+                u32 control = 0, bool preserve = false) {
+        scheduler.Record([this, descriptors, output, extent, control,
+                          preserve](vk::CommandBuffer cmd) {
             const VkMemoryBarrier inputs{
                 .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
                 .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
@@ -597,7 +603,9 @@ public:
             };
             const auto prepare = ProbeBarrier(output, VK_ACCESS_MEMORY_READ_BIT |
                                                           VK_ACCESS_MEMORY_WRITE_BIT,
-                                              VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                                              VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+                                              preserve ? VK_IMAGE_LAYOUT_GENERAL
+                                                       : VK_IMAGE_LAYOUT_UNDEFINED,
                                               VK_IMAGE_LAYOUT_GENERAL);
             cmd.PipelineBarrier(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, inputs, {}, prepare);
@@ -666,6 +674,9 @@ struct OcarinaFrameSlot {
     vk::ImageView motion_view;
     vk::Image color;
     vk::ImageView color_view;
+    /// AMD frame generation's depth: the scene's, with the HUD nearest.
+    vk::Image frame_gen_depth;
+    vk::ImageView frame_gen_depth_view;
     std::unique_ptr<ActorOverlay> overlay;
 };
 
@@ -789,6 +800,14 @@ struct OcarinaUpscaler::Impl {
     std::unique_ptr<OcarinaEffectsPass<1>> effects_base_pass;
     std::unique_ptr<OcarinaEffectsPass<2>> effects_mark_pass;
     std::unique_ptr<OcarinaEffectsPass<3>> effects_bias_pass;
+    /// Where the last frame drew its HUD, at the output size (AMD frame generation).
+    vk::Image hud_mask;
+    vk::ImageView hud_mask_view;
+    VkExtent2D hud_mask_extent{};
+    bool hud_mask_ready{};
+    std::unique_ptr<OcarinaEffectsPass<2>> hud_mask_pass;
+    std::unique_ptr<OcarinaEffectsPass<1>> hud_motion_pass;
+    std::unique_ptr<OcarinaEffectsPass<2>> hud_depth_pass;
 
     VkSampler LinearSampler() {
         if (!linear_sampler) {
@@ -908,6 +927,36 @@ void OcarinaUpscaler::MarkEffects(VkImageView scene, u64 frame) {
     state.scheduler.InvalidateState();
     effects.previous_marked_frame = effects.marked_frame;
     effects.marked_frame = frame;
+}
+
+void OcarinaUpscaler::MakeHudMask(VkImageView before_hud, VkImageView after_hud,
+                                  VkExtent2D extent) {
+    auto& state = *impl;
+    if (!state.hud_mask_pass) {
+        state.hud_mask_pass = std::make_unique<OcarinaEffectsPass<2>>(
+            state.device, state.scheduler, state.pool, OCARINA_HUD_MASK_COMP_SPV);
+    }
+    if (!state.hud_mask || state.hud_mask_extent.width != extent.width ||
+        state.hud_mask_extent.height != extent.height) {
+        state.scheduler.Finish();
+        state.hud_mask = CreateOcarinaImage(state.allocator, extent, VK_FORMAT_R8_UNORM,
+                                            VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+        state.hud_mask_view = CreateOcarinaView(state.device, *state.hud_mask, VK_FORMAT_R8_UNORM);
+        state.hud_mask_extent = extent;
+        state.hud_mask_ready = false;
+    }
+    const VkSampler sampler = state.PointSampler();
+    state.scheduler.RequestOutsideRenderPassOperationContext();
+    state.queue.Acquire(state.scheduler, 3);
+    state.queue.AddSampledImage(before_hud, sampler);
+    state.queue.AddSampledImage(after_hud, sampler);
+    state.queue.AddImage(*state.hud_mask_view);
+    state.hud_mask_pass->Record(state.scheduler, state.queue.UpdateData(), *state.hud_mask, extent);
+    state.scheduler.InvalidateState();
+    if (!std::exchange(state.hud_mask_ready, true)) {
+        LOG_INFO(Render_Vulkan, "AMD frame generation: the HUD is masked per pixel ({}x{})",
+                 extent.width, extent.height);
+    }
 }
 
 VkImage OcarinaUpscaler::CompositedImage() const {
@@ -1082,10 +1131,50 @@ bool OcarinaUpscaler::Record(VkImageView color, VkImageView depth, VkImageView t
         }
     }
     state.output_fsr4 = used_fsr4;
-    // AMD FSR frame generation (vk_amd_frame_gen.h): the frame's depth, camera and actor motion.
+    // AMD FSR frame generation (vk_amd_frame_gen.h): the frame's depth, camera and actor motion,
+    // without motion where the last frame's HUD sat (the upscaler above needed it there) and with
+    // the HUD nearest, so generated frames keep the hearts and icons still.
     if (AmdFrameGen::Requested()) {
+        static const bool hud_mask = [] {
+            const char* const value = std::getenv("EDEN_NX2_AMD_FG_HUD_MASK");
+            return !value || value[0] != '0';
+        }();
+        bool hud_depth = false;
+        if (hud_mask && state.hud_mask_ready) {
+            const VkSampler point = state.PointSampler();
+            if (!state.hud_motion_pass) {
+                state.hud_motion_pass = std::make_unique<OcarinaEffectsPass<1>>(
+                    state.device, state.scheduler, state.pool, OCARINA_HUD_MOTION_COMP_SPV);
+                state.hud_depth_pass = std::make_unique<OcarinaEffectsPass<2>>(
+                    state.device, state.scheduler, state.pool, OCARINA_HUD_DEPTH_COMP_SPV);
+            }
+            state.scheduler.RequestOutsideRenderPassOperationContext();
+            state.queue.Acquire(state.scheduler, 2);
+            state.queue.AddSampledImage(*state.hud_mask_view, point);
+            state.queue.AddImage(*resources.motion_view);
+            state.hud_motion_pass->Record(state.scheduler, state.queue.UpdateData(),
+                                          *resources.motion, extent, 0, true);
+            if (!resources.frame_gen_depth) {
+                resources.frame_gen_depth =
+                    CreateOcarinaImage(state.allocator, extent, VK_FORMAT_R32_SFLOAT,
+                                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+                resources.frame_gen_depth_view = CreateOcarinaView(
+                    state.device, *resources.frame_gen_depth, VK_FORMAT_R32_SFLOAT);
+            }
+            state.queue.Acquire(state.scheduler, 3);
+            state.queue.AddSampledImage(depth, point);
+            state.queue.AddSampledImage(*state.hud_mask_view, point);
+            state.queue.AddImage(*resources.frame_gen_depth_view);
+            state.hud_depth_pass->Record(state.scheduler, state.queue.UpdateData(),
+                                         *resources.frame_gen_depth, extent);
+            hud_depth = true;
+        }
         AmdFrameGen::Prepare(state.scheduler, {
-            .depth = {depth_image, VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT},
+            .depth = hud_depth ? AmdFrameGen::PrepareImage{*resources.frame_gen_depth,
+                                                           VK_FORMAT_R32_SFLOAT,
+                                                           VK_IMAGE_ASPECT_COLOR_BIT}
+                               : AmdFrameGen::PrepareImage{depth_image, VK_FORMAT_D32_SFLOAT,
+                                                           VK_IMAGE_ASPECT_DEPTH_BIT},
             .motion_vectors = {*resources.motion, MOTION_FORMAT, VK_IMAGE_ASPECT_COLOR_BIT},
             .render_size = extent,
             .view_projection = current,
