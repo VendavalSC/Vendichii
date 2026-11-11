@@ -341,6 +341,11 @@ struct Values {
                                                                 linkage, true, "cpuopt_unsafe_ignore_global_monitor", Category::CpuUnsafe};
 
     // Renderer
+    SwitchableSetting<bool> hdr{linkage, false, "hdr", Category::Renderer};
+    SwitchableSetting<u16, true> hdr_reference_white{linkage, 200, 0, 1000, "hdr_reference_white",
+                                                  Category::Renderer, Specialization::Scalar};
+    SwitchableSetting<u16, true> hdr_peak_luminance{linkage, 300, 80, 10000, "hdr_peak_luminance",
+                                                 Category::Renderer, Specialization::Scalar};
     SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
 #if defined(__sun__) || defined(__managarm__)
         RendererBackend::OpenGL_GLSL,
@@ -478,7 +483,7 @@ struct Values {
                                       Specialization::Default, true, false};
 
     SwitchableSetting<FrameGenType> frame_gen_type{linkage,
-                                                   FrameGenType::Fsr3,
+                                                   FrameGenType::AmdFsr3,
                                                    "frame_gen_type",
                                                    Category::Renderer,
                                                    Specialization::Default,
@@ -486,7 +491,18 @@ struct Values {
                                                    false,
                                                    &frame_gen};
 
-    SwitchableSetting<u32, true> frame_gen_multiplier{linkage,
+        /// AMD FSR frame generation: Auto takes the newest AMD offers for the GPU (FSR 4's on
+    /// RX 9000), Fsr31 always FSR 3.1's (lighter). From Cheezer's AMD Superior.
+    SwitchableSetting<AmdFrameGenVersion> amd_frame_gen_version{linkage,
+                                                                AmdFrameGenVersion::Auto,
+                                                                "amd_frame_gen_version",
+                                                                Category::Renderer,
+                                                                Specialization::Default,
+                                                                true,
+                                                                false,
+                                                                &frame_gen};
+
+SwitchableSetting<u32, true> frame_gen_multiplier{linkage,
                                                       2,
                                                       2,
                                                       4,
@@ -693,7 +709,7 @@ struct Values {
     // Ask: the desktop app asks at launch while the game has no finished precache; where nothing
     // asks, as Off.
     SwitchableSetting<PrecacheShaders> precache_shaders{linkage,
-                                                        PrecacheShaders::Off,
+                                                        PrecacheShaders::Always,
                                                         "precache_shaders",
                                                         Category::RendererAdvanced,
                                                         Specialization::Default,
@@ -824,6 +840,9 @@ struct Values {
                                                        true,
 #endif
                                                        "vertex_input_dynamic_state", Category::RendererExtensions};
+
+    SwitchableSetting<MeshShaderMode> mesh_shaders{linkage, MeshShaderMode::Automatic,
+                                                   "mesh_shaders", Category::RendererExtensions};
 
     Setting<bool> renderer_debug{linkage, false, "debug", Category::RendererDebug};
     Setting<bool> renderer_shader_feedback{linkage, false, "shader_feedback",
@@ -1084,6 +1103,9 @@ constexpr u32 MIN_FRAME_GEN_MULTIPLIER = 2;
 constexpr u32 MAX_FRAME_GEN_MULTIPLIER = 4;
 
 [[nodiscard]] u32 FrameGenMultiplier();
+/// Whether emulation runs at the speed limit: use_speed_limit, and in Fritchii always for Ocarina
+/// of Time, whose logic speeds up with the frame rate ("Unlocked" made the game run fast).
+[[nodiscard]] bool SpeedLimitEnabled();
 
 [[nodiscard]] size_t FrameGenGenerations();
 
