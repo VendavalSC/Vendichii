@@ -13,4 +13,9 @@ namespace Vulkan {
 /// Switch 2 game's 14 GiB of committed guest memory makes likely on 16 GB hosts (#462).
 void ReportPipelineBuildFailure(VkResult result);
 
+/// For a build that ran out of host or video memory: waits a little (other builds and the texture
+/// cache free memory meanwhile) and returns true while `attempt` is below the retry limit. An 8 GB
+/// card that filled up otherwise lost those pipelines for the session and drew nothing with them.
+[[nodiscard]] bool RetryPipelineBuild(VkResult result, int attempt);
+
 } // namespace Vulkan

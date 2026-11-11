@@ -305,10 +305,19 @@ ComputePipeline::ComputePipeline(const Device& device_, Scheduler& scheduler, vk
             const bool unoptimized = (flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT) != 0;
             const auto trace_begin = std::chrono::steady_clock::now();
             TracePipelineBuild("BEGIN", "compute", shader_hash, traced, unoptimized);
-            pipeline = binaries ? binaries->CreateComputePipeline(compute_ci, *pipeline_cache,
-                                                                  binary_key)
-                                : device.GetLogical().CreateComputePipeline(compute_ci,
-                                                                            *pipeline_cache);
+            for (int attempt = 0;; ++attempt) {
+                try {
+                    pipeline = binaries ? binaries->CreateComputePipeline(
+                                              compute_ci, *pipeline_cache, binary_key)
+                                        : device.GetLogical().CreateComputePipeline(
+                                              compute_ci, *pipeline_cache);
+                    break;
+                } catch (const vk::Exception& exception) {
+                    if (!RetryPipelineBuild(exception.GetResult(), attempt)) {
+                        throw;
+                    }
+                }
+            }
             TracePipelineBuild("END", "compute", shader_hash, traced, unoptimized,
                                std::chrono::duration<double, std::milli>(
                                    std::chrono::steady_clock::now() - trace_begin)

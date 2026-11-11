@@ -606,7 +606,16 @@ GraphicsPipeline::GraphicsPipeline(
             }
             const VkRenderPass render_pass{render_pass_cache.Get(MakeRenderPassKey(key.state, device))};
             Validate();
-            MakePipeline(render_pass);
+            for (int attempt = 0;; ++attempt) {
+                try {
+                    MakePipeline(render_pass);
+                    break;
+                } catch (const vk::Exception& exception) {
+                    if (!RetryPipelineBuild(exception.GetResult(), attempt)) {
+                        throw;
+                    }
+                }
+            }
         } catch (const Shader::Exception& exception) {
             LOG_ERROR(Render_Vulkan, "Graphics pipeline {:016x}: {}", key.Hash(), exception.what());
             throw;
