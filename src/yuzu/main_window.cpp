@@ -49,6 +49,7 @@
 #include "yuzu/game/game_list.h"
 #include "yuzu/nup_dialogs.h"
 #include "yuzu/recommended_settings_dialog.h"
+#include "common/game_presets.h"
 #include "yuzu/shader_warm_dialog.h"
 #include "video_core/shader_warm/shader_warm_builder.h"
 #ifdef LICHII_NX_TOOLS
