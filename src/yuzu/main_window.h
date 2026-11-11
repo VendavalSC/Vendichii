@@ -185,6 +185,16 @@ public:
 
     std::filesystem::path GetShortcutPath(QtCommon::Game::ShortcutTarget target);
 
+    /// Frames per second frame generation added since the last status bar update.
+    [[nodiscard]] double FrameGenFps() const {
+        return frame_gen_fps;
+    }
+
+    /// What NVIDIA DLSS ran as since the last status bar update, empty when it didn't run
+    [[nodiscard]] const QString& DlssStatusText() const {
+        return dlss_status_text;
+    }
+
 signals:
 
     /**
@@ -361,13 +371,6 @@ private slots:
     void OnGameListRemovePlayTimeData(u64 program_id);
     void OnGameListSetPlayTime(u64 program_id);
     void OnGameListDumpRomFS(u64 program_id, const std::string& game_path, DumpRomFSTarget target);
-    void OnGameListPrepareShadersFromRecipe(u64 program_id, const std::string& game_path);
-    /// Assembles a recipe (asks for the file when `recipe` is empty).
-    void PrepareShadersFromRecipe(u64 program_id, const std::string& game_path,
-                                  const QString& recipe);
-    /// Before a game boots: a recipe in recipes\ beside the exe for this game and shader cache
-    /// version, with no precompiled file made from it yet, is assembled without asking.
-    void PrepareBundledRecipe(u64 program_id, const std::string& game_path);
     void OnGameListVerifyIntegrity(const std::string& game_path);
     void OnGameListConvertToNup(const std::string& game_path);
     void OnGameListPrepareShaderWarm(u64 program_id, const std::string& game_path);
@@ -413,6 +416,8 @@ private slots:
     void OnInstallDecryptionKeys();
     void OnAbout();
     void OnEdenDependencies();
+    void OnApplyRecommendedSettings();
+    void OnRestorePreviousSettings();
     void OnDataDialog();
     void OnToggleFilterBar();
     void OnToggleStatusBar();
@@ -522,10 +527,6 @@ private:
 #endif
 
     MultiplayerState* multiplayer_state = nullptr;
-    bool use_recommended_mkw_settings = false;
-    bool asked_recommended_mkw_settings = false;
-    bool use_recommended_oot_settings = false;
-    bool asked_recommended_oot_settings = false;
 
     GRenderWindow* render_window = nullptr;
     GameList* game_list = nullptr;
@@ -548,6 +549,7 @@ private:
     QLabel* res_scale_label = nullptr;
     QLabel* emu_speed_label = nullptr;
     QLabel* game_fps_label = nullptr;
+    QLabel* dlss_status_label = nullptr;
     QLabel* emu_frametime_label = nullptr;
     QLabel* tas_label = nullptr;
     QLabel* firmware_label = nullptr;
@@ -561,7 +563,11 @@ private:
     QPushButton* frame_gen_status_button = nullptr;
     VideoCore::FrameGenState frame_gen_state{};
     u64 frame_gen_frames = 0;
+    u64 dlss_evaluations = 0;
+    QString dlss_status_text;
     bool frame_gen_generating = false;
+    double frame_gen_fps = 0.0;
+    QElapsedTimer frame_gen_fps_timer;
     VolumeButton* volume_button = nullptr;
     QWidget* volume_popup = nullptr;
     QSlider* volume_slider = nullptr;
@@ -576,6 +582,10 @@ private:
     // Whether emulation is currently running in yuzu.
     bool emulation_running = false;
     std::optional<CompatibilityReporting::Session> report_session;
+    bool use_recommended_mkw_settings = false;
+    bool asked_recommended_mkw_settings = false;
+    bool use_recommended_oot_settings = false;
+    bool asked_recommended_oot_settings = false;
     bool boot_in_progress = false;
     bool close_pending = false;
     // The path to the game currently running

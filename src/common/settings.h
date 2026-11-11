@@ -65,6 +65,8 @@ SETTING(u16, false);
 SWITCHABLE(AnisotropyMode, true);
 SWITCHABLE(AntiAliasing, false);
 SWITCHABLE(OotAntiAliasing, false);
+SWITCHABLE(NvidiaDlssQuality, false);
+SWITCHABLE(NvidiaDlssPreset, false);
 SWITCHABLE(AspectRatio, true);
 SWITCHABLE(AstcDecodeMode, true);
 SWITCHABLE(AstcRecompression, true);
@@ -339,11 +341,6 @@ struct Values {
                                                                 linkage, true, "cpuopt_unsafe_ignore_global_monitor", Category::CpuUnsafe};
 
     // Renderer
-    SwitchableSetting<bool> hdr{linkage, false, "hdr", Category::Renderer};
-    SwitchableSetting<u16, true> hdr_reference_white{linkage, 200, 0, 1000, "hdr_reference_white",
-                                                  Category::Renderer, Specialization::Scalar};
-    SwitchableSetting<u16, true> hdr_peak_luminance{linkage, 300, 80, 10000, "hdr_peak_luminance",
-                                                 Category::Renderer, Specialization::Scalar};
     SwitchableSetting<RendererBackend, true> renderer_backend{linkage,
 #if defined(__sun__) || defined(__managarm__)
         RendererBackend::OpenGL_GLSL,
@@ -416,10 +413,20 @@ struct Values {
                                                   false};
     // NVIDIA DLSS (through NVIDIA Streamline) in place of a game's DLSS.
     SwitchableSetting<bool> nvidia_dlss{linkage, false, "nvidia_dlss", Category::Renderer};
-    // The DLSS model (preset) for every mode: K by default; Default leaves the choice to NVIDIA.
-    // EDEN_NX2_DLSS_PRESET still overrides it. From Fritchii v5.5 (Frizti).
-    Setting<DlssPreset> nvidia_dlss_preset{linkage, DlssPreset::K, "nvidia_dlss_preset",
-                                           Category::Renderer};
+    SwitchableSetting<NvidiaDlssQuality> nvidia_dlss_quality{linkage,
+                                                             NvidiaDlssQuality::Automatic,
+                                                             "nvidia_dlss_quality",
+                                                             Category::Renderer,
+                                                             Specialization::Default,
+                                                             true,
+                                                             true};
+    SwitchableSetting<NvidiaDlssPreset> nvidia_dlss_preset{linkage,
+                                                           NvidiaDlssPreset::M,
+                                                           "nvidia_dlss_preset",
+                                                           Category::Renderer,
+                                                           Specialization::Default,
+                                                           true,
+                                                           true};
     SwitchableSetting<bool> ocarina_fsr{linkage, false, "ocarina_fsr", Category::Renderer};
     // AMD FSR 4 in place of FSR 3.1 where FSR replaces a game's upscaler (Windows, AMD's driver).
     SwitchableSetting<bool> amd_fsr4{linkage, false, "amd_fsr4", Category::Renderer};
@@ -471,7 +478,7 @@ struct Values {
                                       Specialization::Default, true, false};
 
     SwitchableSetting<FrameGenType> frame_gen_type{linkage,
-                                                   FrameGenType::AmdFsr3,
+                                                   FrameGenType::Fsr3,
                                                    "frame_gen_type",
                                                    Category::Renderer,
                                                    Specialization::Default,
@@ -479,18 +486,7 @@ struct Values {
                                                    false,
                                                    &frame_gen};
 
-        /// AMD FSR frame generation: Auto takes the newest AMD offers for the GPU (FSR 4's on
-    /// RX 9000), Fsr31 always FSR 3.1's (lighter). From Cheezer's AMD Superior.
-    SwitchableSetting<AmdFrameGenVersion> amd_frame_gen_version{linkage,
-                                                                AmdFrameGenVersion::Auto,
-                                                                "amd_frame_gen_version",
-                                                                Category::Renderer,
-                                                                Specialization::Default,
-                                                                true,
-                                                                false,
-                                                                &frame_gen};
-
-SwitchableSetting<u32, true> frame_gen_multiplier{linkage,
+    SwitchableSetting<u32, true> frame_gen_multiplier{linkage,
                                                       2,
                                                       2,
                                                       4,
@@ -697,7 +693,7 @@ SwitchableSetting<u32, true> frame_gen_multiplier{linkage,
     // Ask: the desktop app asks at launch while the game has no finished precache; where nothing
     // asks, as Off.
     SwitchableSetting<PrecacheShaders> precache_shaders{linkage,
-                                                        PrecacheShaders::Always,
+                                                        PrecacheShaders::Off,
                                                         "precache_shaders",
                                                         Category::RendererAdvanced,
                                                         Specialization::Default,
@@ -828,9 +824,6 @@ SwitchableSetting<u32, true> frame_gen_multiplier{linkage,
                                                        true,
 #endif
                                                        "vertex_input_dynamic_state", Category::RendererExtensions};
-
-    SwitchableSetting<MeshShaderMode> mesh_shaders{linkage, MeshShaderMode::Automatic,
-                                                   "mesh_shaders", Category::RendererExtensions};
 
     Setting<bool> renderer_debug{linkage, false, "debug", Category::RendererDebug};
     Setting<bool> renderer_shader_feedback{linkage, false, "shader_feedback",
@@ -1049,6 +1042,9 @@ SwitchableSetting<u32, true> frame_gen_multiplier{linkage,
     Setting<bool> log_flush_line{linkage, false, "flush_line", Category::Miscellaneous, Specialization::Default, true, true};
     Setting<bool> censor_username{linkage, true, "censor_username", Category::Miscellaneous};
     Setting<bool> first_launch{linkage, true, "first_launch", Category::Miscellaneous};
+    // The values the recommended settings (common/recommended_settings.h) replaced.
+    Setting<std::string> recommended_settings_backup{
+        linkage, {}, "recommended_settings_backup", Category::Miscellaneous};
 
     // Network
     Setting<std::string> network_interface{linkage, std::string(), "network_interface",
@@ -1068,18 +1064,26 @@ SwitchableSetting<u32, true> frame_gen_multiplier{linkage,
 
     // Per-game overrides
     bool use_squashed_iterated_blend;
+    /// A title that reads GPU-written memory on the CPU needs reactive flushing whatever the
+    /// setting says. Set per boot by the game overrides; the settings dialog never touches it.
+    bool force_reactive_flushing{};
 
 };
 
 extern Values values;
 
+struct NvidiaDlssRuntimeSettings {
+    NvidiaDlssQuality quality;
+    NvidiaDlssPreset preset;
+};
+
+void RefreshNvidiaDlssRuntimeSettings();
+NvidiaDlssRuntimeSettings GetNvidiaDlssRuntimeSettings();
+
 constexpr u32 MIN_FRAME_GEN_MULTIPLIER = 2;
 constexpr u32 MAX_FRAME_GEN_MULTIPLIER = 4;
 
 [[nodiscard]] u32 FrameGenMultiplier();
-/// Whether emulation runs at the speed limit: use_speed_limit, and in Fritchii always for Ocarina
-/// of Time, whose logic speeds up with the frame rate ("Unlocked" made the game run fast).
-[[nodiscard]] bool SpeedLimitEnabled();
 
 [[nodiscard]] size_t FrameGenGenerations();
 
@@ -1107,6 +1111,10 @@ u64 GetCurrentProgramID();
 // Whether the program being loaded is a Switch 2 one (set by the core before the GPU starts).
 void SetCurrentProgramIsSwitch2(bool is_switch2);
 bool CurrentProgramIsSwitch2();
+
+/// Whether GPU-written memory is flushed back when the CPU reads it: the setting, or a title
+/// that requires it.
+bool ReactiveFlushing();
 
 // The ASTC recompression in effect: astc_recompression, unless the renderer picked another one
 // for the running program (the configuration is left as is). The core clears it on load.

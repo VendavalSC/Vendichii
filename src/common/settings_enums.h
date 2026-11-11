@@ -152,6 +152,8 @@ ENUM(ResolutionSetup, Res1_4X, Res1_2X, Res3_4X, Res1X, Res5_4X, Res3_2X, Res2X,
 ENUM(ScalingFilter, NearestNeighbor, Bilinear, Bicubic, Gaussian, Lanczos, ScaleForce, Fsr, Area, ZeroTangent, BSpline, Mitchell, Spline1, Mmpx, Sgsr, SgsrEdge, Fsr3);
 ENUM(AntiAliasing, None, Fxaa, Smaa);
 ENUM(OotAntiAliasing, Game, NoSharpening);
+ENUM(NvidiaDlssQuality, Automatic, Native, Quality, Balanced, Performance, UltraPerformance);
+ENUM(NvidiaDlssPreset, M, NvidiaDefault, E, F, J, K, L);
 ENUM(AspectRatio, R16_9, R4_3, R21_9, R16_10, Stretch);
 ENUM(ConsoleMode, Handheld, Docked);
 ENUM(AppletMode, HLE, LLE, Disabled);
@@ -169,7 +171,6 @@ ENUM(FrameGenType, Lsfg, Fsr3, AmdFsr3, AmdFsr);
 
 ENUM(AmdFrameGenVersion, Auto, Fsr31);
 
-ENUM(DlssPreset, Default, J, K, L, M);
 ENUM(MeshShaderMode, Automatic, Native, Compute);
 
 template <typename Type>
